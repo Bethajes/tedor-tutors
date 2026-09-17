@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ErrorBanner, Spinner } from '@tedor/ui';
-import { api } from '../../lib/api';
+import { api } from '../lib/api';
 
 interface UserSummary {
   id: string;

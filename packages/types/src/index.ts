@@ -91,3 +91,80 @@ export const ERROR_CODES = {
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
+
+export const GENDERS = ['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY'] as const;
+export type Gender = (typeof GENDERS)[number];
+
+export interface ClientProfileAccountInfo {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  emailVerified: boolean;
+  status: AccountStatus;
+  createdAt: string;
+}
+
+export interface ClientProfile {
+  id: string;
+  firstName: string;
+  lastName: string;
+  photoUrl: string | null;
+  phone: string | null;
+  preferredLanguage: string | null;
+  location: string | null;
+  address: string | null;
+  bio: string | null;
+  createdAt: string;
+  updatedAt: string;
+  user: ClientProfileAccountInfo;
+}
+
+export interface Learner {
+  id: string;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string | null;
+  age: number | null;
+  gender: Gender | null;
+  grade: string | null;
+  school: string | null;
+  curriculum: string | null;
+  subjects: string[];
+  goals: string | null;
+  preferredLanguage: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpdateClientProfileRequest {
+  firstName?: string;
+  lastName?: string;
+  photoUrl?: string | null;
+  phone?: string | null;
+  preferredLanguage?: string | null;
+  location?: string | null;
+  address?: string | null;
+  bio?: string | null;
+}
+
+export interface CreateLearnerRequest {
+  firstName: string;
+  lastName: string;
+  dateOfBirth?: string;
+  gender?: Gender;
+  grade?: string | null;
+  school?: string | null;
+  curriculum?: string | null;
+  subjects?: string[];
+  goals?: string | null;
+  preferredLanguage?: string | null;
+  notes?: string | null;
+}
+
+export type UpdateLearnerRequest = Partial<CreateLearnerRequest>;
+
+export interface LearnerList {
+  items: Learner[];
+}

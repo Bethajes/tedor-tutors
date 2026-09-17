@@ -82,7 +82,63 @@ async function upsertUser(
       roleId: (await prisma.role.findUniqueOrThrow({ where: { name: role } })).id,
     },
   });
-  return { email: user.email, role, status: user.status };
+  return { id: user.id, email: user.email, role, status: user.status };
+}
+
+async function seedDemoClient(userId: string) {
+  const profile = await prisma.clientProfile.upsert({
+    where: { userId },
+    update: {},
+    create: {
+      userId,
+      firstName: 'Demo',
+      lastName: 'Client',
+      phone: '+12025550101',
+      preferredLanguage: 'English',
+      location: 'San Francisco, CA',
+      address: 'Service area: San Francisco Bay Area',
+      bio: 'Demo parent looking for after-school tutoring for my children.',
+    },
+  });
+
+  const existing = await prisma.learner.findFirst({
+    where: { clientProfileId: profile.id, deletedAt: null },
+    orderBy: { createdAt: 'asc' },
+  });
+  if (existing) return;
+
+  await prisma.learner.createMany({
+    data: [
+      {
+        clientProfileId: profile.id,
+        firstName: 'Ava',
+        lastName: 'Client',
+        dateOfBirth: new Date('2015-04-12'),
+        gender: 'FEMALE',
+        grade: 'Grade 5',
+        school: 'Sunset Elementary',
+        curriculum: 'Common Core',
+        subjects: ['Math', 'Reading'],
+        goals: 'Build confidence in math and improve reading comprehension.',
+        preferredLanguage: 'English',
+        notes: 'Prefers morning sessions.',
+      },
+      {
+        clientProfileId: profile.id,
+        firstName: 'Leo',
+        lastName: 'Client',
+        dateOfBirth: new Date('2017-09-03'),
+        gender: 'MALE',
+        grade: 'Grade 2',
+        school: 'Sunset Elementary',
+        curriculum: 'Common Core',
+        subjects: ['Reading', 'Writing'],
+        goals: 'Develop early literacy skills.',
+        preferredLanguage: 'English',
+        notes: null,
+      },
+    ],
+  });
 }
 
 async function main() {
@@ -108,6 +164,14 @@ async function main() {
       emailVerified: true,
     }),
   ]);
+
+  const demoClient = accounts.find((account) => account.role === UserRoleName.CLIENT);
+  if (demoClient) {
+    await seedDemoClient(demoClient.id);
+  } else {
+    const seededClient = await prisma.user.findUnique({ where: { email: demoClientEmail } });
+    if (seededClient) await seedDemoClient(seededClient.id);
+  }
 
   console.log('Seed complete. Accounts:');
   accounts.forEach((account) =>

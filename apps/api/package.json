@@ -12,7 +12,7 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx ../../prisma/seed.ts",
-    "start:dev": "tsx watch src/main.ts",
+    "start:dev": "nest start --watch",
     "start": "node dist/apps/api/src/main.js"
   },
   "dependencies": {
@@ -43,6 +43,7 @@
     "@tedor/eslint-config": "workspace:*",
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.14",
+    "@types/multer": "^2.2.0",
     "@types/node": "^22.10.5",
     "@types/passport-jwt": "^4.0.1",
     "@types/supertest": "^6.0.2",
