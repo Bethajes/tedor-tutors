@@ -1,0 +1,24 @@
+{
+  "name": "tedor-path",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "db:migrate": "pnpm --filter @tedor/api db:migrate",
+    "db:seed": "pnpm --filter @tedor/api db:seed"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@prisma/client": "6.19.3",
+    "@types/node": "22.10.5",
+    "prettier": "3.4.2",
+    "prisma": "6.19.3",
+    "tsx": "4.19.2",
+    "typescript": "5.7.3"
+  }
+}

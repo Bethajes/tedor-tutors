@@ -1,0 +1,4 @@
+{
+  "extends": "@tedor/config/tsconfig.node.json",
+  "include": ["src"]
+}

@@ -1,0 +1,125 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRoleName {
+  CLIENT
+  TUTOR
+  COORDINATOR
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum AccountStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  DISABLED
+}
+
+model Role {
+  id          String           @id @default(cuid())
+  name        UserRoleName     @unique
+  description String?
+  users       User[]
+  permissions RolePermission[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([name])
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  key         String           @unique
+  description String?
+  roles       RolePermission[]
+  createdAt   DateTime         @default(now())
+
+  @@index([key])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  assignedAt   DateTime   @default(now())
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+}
+
+model User {
+  id               String                @id @default(cuid())
+  name             String
+  email            String                @unique
+  phone            String?               @unique
+  passwordHash     String
+  roleId           String
+  role             Role                  @relation(fields: [roleId], references: [id])
+  status           AccountStatus         @default(PENDING_VERIFICATION)
+  emailVerifiedAt  DateTime?
+  lastLoginAt      DateTime?
+  telegramId       String?               @unique
+  telegramUsername String?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  sessions                 Session[]
+  emailVerificationTokens  EmailVerificationToken[]
+  passwordResetTokens      PasswordResetToken[]
+
+  @@index([email])
+  @@index([roleId])
+  @@index([status])
+}
+
+model Session {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash       String    @unique
+  userAgent       String?
+  ip              String?
+  lastUsedAt      DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  replacedBy      String?
+  replacesSession String?
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([userId, revokedAt])
+}
+
+model EmailVerificationToken {
+  id         String    @id @default(cuid())
+  tokenHash  String    @unique
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id         String    @id @default(cuid())
+  tokenHash  String    @unique
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}

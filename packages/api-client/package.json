@@ -1,0 +1,21 @@
+{
+  "name": "@tedor/api-client",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tedor/types": "workspace:*"
+  },
+  "devDependencies": {
+    "@tedor/config": "workspace:*",
+    "@tedor/eslint-config": "workspace:*",
+    "typescript": "5.7.3",
+    "eslint": "^9.17.0"
+  }
+}
