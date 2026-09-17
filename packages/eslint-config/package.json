@@ -1,0 +1,15 @@
+{
+  "name": "@tedor/eslint-config",
+  "version": "0.1.0",
+  "main": "index.js",
+  "type": "module",
+  "peerDependencies": {
+    "eslint": "^9.0.0",
+    "typescript": "^5.7.3 <6"
+  },
+  "dependencies": {
+    "@eslint/js": "^9.17.0",
+    "typescript-eslint": "^8.18.0",
+    "typescript": "5.7.3"
+  }
+}

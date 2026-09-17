@@ -1,0 +1,21 @@
+# dependencies
+node_modules/
+
+# builds
+dist/
+.next/
+.expo/
+coverage/
+
+# env
+.env
+.env.local
+.env.*.local
+
+# prisma
+prisma/migrations/dev.db
+
+# misc
+*.log
+.DS_Store
+tsconfig.tsbuildinfo

@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tedor-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tedor
+      POSTGRES_PASSWORD: tedor_dev_password
+      POSTGRES_DB: tedor_dev
+    ports:
+      - "5434:5432"
+    volumes:
+      - tedor_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tedor -d tedor_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: tedor-postgres-test
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tedor
+      POSTGRES_PASSWORD: tedor_test_password
+      POSTGRES_DB: tedor_test
+    ports:
+      - "5433:5432"
+    volumes:
+      - tedor_pg_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tedor -d tedor_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  tedor_pg_data:
+  tedor_pg_test_data:
