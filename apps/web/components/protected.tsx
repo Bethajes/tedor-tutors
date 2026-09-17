@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, type ReactNode } from 'react';
 import { Spinner } from '@tedor/ui';
-import { useAuth, ROLE_HOME } from './auth-context';
+import { useAuth, ROLE_HOME } from '../lib/auth-context';
 
 export function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, initializing } = useAuth();

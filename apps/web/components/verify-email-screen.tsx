@@ -9,7 +9,7 @@ import { tokenStorage } from '../lib/token-storage';
 export function VerifyEmailScreen({ token }: { token?: string }) {
   const [status, setStatus] = useState<'idle' | 'working' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState<string | null>(null);
-  const [canResend, setCanResend] = useState(tokenStorage.getAccessToken() !== null);
+  const [canResend] = useState(tokenStorage.getAccessToken() !== null);
 
   useEffect(() => {
     if (!token) {

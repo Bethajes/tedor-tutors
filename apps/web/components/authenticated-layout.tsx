@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { ErrorBanner } from '@tedor/ui';
 import { useAuth } from '../lib/auth-context';
 
 export function AuthenticatedLayout({ children }: { children: ReactNode }) {

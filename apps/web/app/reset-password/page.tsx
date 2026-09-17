@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { AuthCard } from '@tedor/ui';
+import { AuthCard, Spinner } from '@tedor/ui';
 import { ResetPasswordForm } from '../../components/reset-password-form';
 
 export default async function ResetPasswordPage({
@@ -11,13 +11,23 @@ export default async function ResetPasswordPage({
   if (!token) {
     return (
       <div style={{ paddingTop: '4rem' }}>
-        <AuthCard title="Missing token" subtitle="Open the reset link from your email again." />
+        <AuthCard title="Missing token" subtitle="Open the reset link from your email again.">
+          <p className="muted">
+            The reset link is incomplete. Request a new password reset email and try again.
+          </p>
+        </AuthCard>
       </div>
     );
   }
   return (
     <div style={{ paddingTop: '4rem' }}>
-      <Suspense fallback={<AuthCard title="Choose a new password" />}>
+      <Suspense
+        fallback={
+          <AuthCard title="Choose a new password">
+            <Spinner label="Loading…" />
+          </AuthCard>
+        }
+      >
         <ResetPasswordForm token={token} />
       </Suspense>
     </div>
