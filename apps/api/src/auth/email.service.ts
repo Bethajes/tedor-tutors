@@ -70,10 +70,6 @@ export class EmailService implements OnModuleInit {
     await this.sendViaProvider(message);
   }
 
-  buildVerifyEmailLink(token: string): string {
-    return `${this.baseUrl()}/verify-email?token=${token}`;
-  }
-
   buildResetPasswordLink(token: string): string {
     return `${this.baseUrl()}/reset-password?token=${token}`;
   }

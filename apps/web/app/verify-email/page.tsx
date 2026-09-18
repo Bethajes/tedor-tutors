@@ -1,24 +1,19 @@
 import { Suspense } from 'react';
-import { AuthCard, Spinner } from '@tedor/ui';
+import { Spinner } from '@tedor/ui';
 import { VerifyEmailScreen } from '../../components/verify-email-screen';
 
-export default async function VerifyEmailPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ token?: string }>;
-}) {
-  const { token } = await searchParams;
+function VerifyFallback() {
   return (
-    <div style={{ paddingTop: '4rem' }}>
-      <Suspense
-        fallback={
-          <AuthCard title="Verify your email">
-            <Spinner label="Loading…" />
-          </AuthCard>
-        }
-      >
-        <VerifyEmailScreen token={token} />
-      </Suspense>
+    <div className="flex min-h-dvh items-center justify-center bg-slate-50">
+      <Spinner label="Loading…" />
     </div>
+  );
+}
+
+export default async function VerifyEmailPage() {
+  return (
+    <Suspense fallback={<VerifyFallback />}>
+      <VerifyEmailScreen />
+    </Suspense>
   );
 }

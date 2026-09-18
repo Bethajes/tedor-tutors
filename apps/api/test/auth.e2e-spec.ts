@@ -68,6 +68,15 @@ describe('Auth API (e2e)', () => {
     return match[1];
   };
 
+  const codeFromMessage = (to: string, subjectPart: string): string => {
+    const message = emailService.lastMessageFor(to);
+    expect(message).toBeDefined();
+    expect(message!.subject).toContain(subjectPart);
+    const match = /\b(\d{6})\b/.exec(message!.body);
+    if (!match) throw new Error('No 6-digit verification code found in mock email');
+    return match[1];
+  };
+
   beforeAll(async () => {
     const moduleFixture = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleFixture.createNestApplication();
@@ -268,10 +277,10 @@ describe('Auth API (e2e)', () => {
   describe('Email verification', () => {
     it('verifies an account and marks it ACTIVE', async () => {
       const account = await register();
-      const token = resetTokenFrom(account.email, 'Verify your Tedor email');
+      const code = codeFromMessage(account.email, 'Your Tedor verification code');
       await request(app.getHttpServer())
         .post(`${base}/auth/verify-email`)
-        .send({ token })
+        .send({ code })
         .expect(200);
 
       const me = await request(app.getHttpServer())
@@ -284,31 +293,39 @@ describe('Auth API (e2e)', () => {
       expect(user!.status).toBe('ACTIVE');
     });
 
-    it('rejects an unknown verification token', async () => {
+    it('rejects an unknown verification code', async () => {
       const response = await request(app.getHttpServer())
         .post(`${base}/auth/verify-email`)
-        .send({ token: 'not-a-real-token' })
+        .send({ code: '000000' })
         .expect(400);
-      expect((response.body as { error: { code: string } }).error.code).toBe('TOKEN_INVALID');
+      expect((response.body as { error: { code: string } }).error.code).toBe('CODE_INVALID');
     });
 
-    it('resends and verifies with a fresh token while invalidating previous ones', async () => {
+    it('rejects a malformed verification code', async () => {
+      const response = await request(app.getHttpServer())
+        .post(`${base}/auth/verify-email`)
+        .send({ code: 'not-a-real-code' })
+        .expect(400);
+      expect((response.body as { error: { code: string } }).error.code).toBe('VALIDATION_FAILED');
+    });
+
+    it('resends and verifies with a fresh code while invalidating previous ones', async () => {
       const account = await register();
-      const stale = resetTokenFrom(account.email, 'Verify your Tedor email');
+      const stale = codeFromMessage(account.email, 'Your Tedor verification code');
 
       await request(app.getHttpServer())
         .post(`${base}/auth/resend-verification`)
         .send({ email: account.email })
         .expect(200);
-      const fresh = resetTokenFrom(account.email, 'Verify your Tedor email');
+      const fresh = codeFromMessage(account.email, 'Your Tedor verification code');
       expect(fresh).not.toBe(stale);
 
-      await request(app.getHttpServer()).post(`${base}/auth/verify-email`).send({ token: fresh }).expect(200);
+      await request(app.getHttpServer()).post(`${base}/auth/verify-email`).send({ code: fresh }).expect(200);
       const staleUse = await request(app.getHttpServer())
         .post(`${base}/auth/verify-email`)
-        .send({ token: stale })
+        .send({ code: stale })
         .expect(400);
-      expect((staleUse.body as { error: { code: string } }).error.code).toBe('TOKEN_INVALID');
+      expect((staleUse.body as { error: { code: string } }).error.code).toBe('CODE_INVALID');
     });
   });
 
@@ -485,6 +502,7 @@ describe('Auth API (e2e)', () => {
 
   describe('Telegram linking foundation', () => {
     const botToken = process.env.TELEGRAM_BOT_TOKEN!;
+    const uniqueTid = (): number => 900_000_000 + Math.floor(Math.random() * 99_000_000);
 
     function buildInitData(user: { id: number; first_name: string; username?: string }, authDate = Math.floor(Date.now() / 1000)): string {
       const userJson = JSON.stringify(user);
@@ -506,7 +524,8 @@ describe('Auth API (e2e)', () => {
 
     it('links a Telegram account after server-side verification', async () => {
       const account = await register();
-      const initData = buildInitData({ id: 987654321, first_name: 'Tedi', username: 'tedi_bot' });
+      const telegramId = uniqueTid();
+      const initData = buildInitData({ id: telegramId, first_name: 'Tedi', username: 'tedi_bot' });
       await request(app.getHttpServer())
         .post(`${base}/auth/telegram/link`)
         .set('Authorization', `Bearer ${account.tokens.accessToken}`)
@@ -520,7 +539,7 @@ describe('Auth API (e2e)', () => {
       expect((me.body as { data: { telegramLinked: boolean } }).data.telegramLinked).toBe(true);
 
       const user = await prisma.user.findUnique({ where: { email: account.email } });
-      expect(user!.telegramId).toBe('987654321');
+      expect(user!.telegramId).toBe(String(telegramId));
       expect(user!.telegramUsername).toBe('tedi_bot');
     });
 
@@ -549,7 +568,7 @@ describe('Auth API (e2e)', () => {
 
     it('rejects linking an already-linked Telegram account from another user', async () => {
       const first = await register();
-      const initData = buildInitData({ id: 555555, first_name: 'Taken' });
+      const initData = buildInitData({ id: uniqueTid(), first_name: 'Taken' });
       await request(app.getHttpServer())
         .post(`${base}/auth/telegram/link`)
         .set('Authorization', `Bearer ${first.tokens.accessToken}`)

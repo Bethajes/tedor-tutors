@@ -1,21 +1,44 @@
 # Current state
 
-## Inspection
+Last verified: 2026-09-18 on branch `feature/matching`.
 
-The target directory `/home/bethel/tedor-path` was empty: no package manifest, source, README, environment files, database schema, migrations or local Git repository existed. Git initially resolved to the parent home directory (an unrelated unborn `master` repository). A separate repository was initialized here on `feature/project-foundation`; the parent repository and Git configuration are untouched. No commits or remotes have been created.
+## Baseline status
 
-## Existing architecture and technologies
+- API (`apps/api`): boots on port 4000 with all modules registered (auth, users,
+  client, matching, tutors, selection, opportunities).
+- Web (`apps/web`): `next dev` on port 3000; proxies `/api/v1/*` to the API;
+  all pages (login, register, dashboard, admin, learners, profile, settings,
+  verify-email, forgot/reset-password, tutor-requests, tutors/[id]) render.
+- Registration works direct (4000) and through the web proxy (3000); mock email
+  verification and reset links are logged by the API console.
 
-Adjacent projects are separate, not sources inside this repository. `Tedor-Web` uses pnpm, React/Vite, Express, PostgreSQL/Drizzle and generated API clients; it has a main branch and existing history. `TedorWebApp/tedor-backend` is an Express/Prisma prototype with User and Note models, not the tutoring relationship domain. Neither was modified or imported. Existing environment secret values were not copied.
+## Database
 
-## Existing features
+- Local PostgreSQL instance on this machine's ports 5434 (dev) and 5433 (test).
+  Docker is not used here (daemon socket not accessible); the documented
+  `docker/docker-compose.yml` provides the same credentials.
+- Dev (5434, `tedor/tedor_dev_password@tedor_dev`) is migrated (5 migrations)
+  and seeded (roles, permissions, `admin@tedor.local`, `client@tedor.local`,
+  `tutor@tedor.local`).
+- Test (5433, `tedor/tedor_test_password@tedor_test`) is migrated + seeded via
+  `bash scripts/e2e-setup.sh`.
+- `apps/api/.env` must exist (copy of `apps/api/.env.example`); it is the env
+  file the API, `prisma.config.ts` and Prisma Client resolve at runtime.
 
-No Tedor Path features exist in the target. The adjacent backend exposes notes; the adjacent web project contains a portal and marketing UI. Their deployment and business correctness have not been verified.
+## Verification gates
 
-## Problems
+- `pnpm typecheck` — all 7 workspaces pass.
+- `pnpm lint` — all workspaces pass.
+- `pnpm --filter @tedor/api test` — 166 unit tests pass.
+- `bash scripts/e2e-setup.sh && pnpm --filter @tedor/api test:e2e` — 49 e2e tests
+  pass (repeatable; Telegram-tid fixtures are unique per run).
+- `pnpm --filter @tedor/api build` and `pnpm --filter @tedor/web build` succeed.
 
-System Node is 18, below the planned runtime. Node 22.21.1 is installed through nvm. pnpm is not initially on PATH. Docker Engine and Compose are available. Shared Git history, hosted branch protection and external provider credentials are not configured.
+## Known limitations
 
-## Reuse and changes
-
-Use the requested Next.js/NestJS/Prisma modular monolith in this new repository. No data migration from the unrelated Note schema is appropriate. Branding or marketing assets from adjacent projects may be reviewed for deliberate reuse later; do not copy secrets or silently migrate those repositories. Initialize workspace tooling, app shells, relational schema, local infrastructure, tests and developer documentation first. Authentication and marketplace workflows remain subsequent increments, not fake working integrations.
+- Email is mock-only (`EMAIL_PROVIDER=mock`); SMTP is supported but unconfigured.
+- Docker Compose cannot be exercised on this machine (no daemon access).
+- The matching domain is a foundation (requests/matches/opportunities/notifications),
+  not yet wired end-to-end into production flows.
+- `pnpm-lock.yaml` carries resolver-string churn from a newer pnpm (12.x); no
+  meaningful dependency changes beyond adding `multer` to `apps/api`.
