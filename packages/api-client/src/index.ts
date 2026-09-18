@@ -7,9 +7,12 @@ import type {
   CreateLearnerRequest,
   Learner,
   LearnerList,
+  OpportunityResponse,
   PublicUser,
   RegisterRequest,
   SessionInfo,
+  TutorOpportunity,
+  TutorOpportunityList,
   UpdateClientProfileRequest,
   UpdateLearnerRequest,
 } from '@tedor/types';
@@ -358,8 +361,29 @@ export class ApiClient {
     return this.raw(`/tutor-requests/${requestId}/matches${query}`, { method: 'POST', auth: true });
   }
 
-  getTutorProfile(tutorId: string): Promise<{
-    id: string;
+  listTutorOpportunities(): Promise<TutorOpportunityList> {
+    return this.raw('/tutor/opportunities', { auth: true });
+  }
+
+  getTutorOpportunity(opportunityId: string): Promise<TutorOpportunity> {
+    return this.raw(`/tutor/opportunities/${opportunityId}`, { auth: true });
+  }
+
+  acceptTutorOpportunity(opportunityId: string): Promise<OpportunityResponse> {
+    return this.raw(`/tutor/opportunities/${opportunityId}/accept`, {
+      method: 'POST',
+      auth: true,
+    });
+  }
+
+  declineTutorOpportunity(opportunityId: string): Promise<OpportunityResponse> {
+    return this.raw(`/tutor/opportunities/${opportunityId}/decline`, {
+      method: 'POST',
+      auth: true,
+    });
+  }
+
+  getTutorProfile(tutorId: string): Promise<{    id: string;
     name: string;
     photo: string | null;
     bio: string | null;

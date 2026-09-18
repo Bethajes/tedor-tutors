@@ -168,3 +168,53 @@ export type UpdateLearnerRequest = Partial<CreateLearnerRequest>;
 export interface LearnerList {
   items: Learner[];
 }
+
+export const OPPORTUNITY_STATUSES = [
+  'PENDING',
+  'ACCEPTED',
+  'DECLINED',
+  'EXPIRED',
+  'CANCELLED',
+] as const;
+export type OpportunityStatus = (typeof OPPORTUNITY_STATUSES)[number];
+
+export interface OpportunityScheduleSlot {
+  id: string;
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+}
+
+export interface TutorOpportunity {
+  id: string;
+  status: OpportunityStatus;
+  respondedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  match: {
+    id: string;
+    score: number;
+    matchReasons: string[];
+  };
+  request: {
+    id: string;
+    subjects: string[];
+    academicLevels: string[];
+    teachingModes: string[];
+    location: string | null;
+    serviceArea: string | null;
+    notes: string | null;
+    schedule: OpportunityScheduleSlot[];
+  };
+}
+
+export interface TutorOpportunityList {
+  opportunities: TutorOpportunity[];
+  count: number;
+}
+
+export interface OpportunityResponse {
+  opportunityId: string;
+  status: OpportunityStatus;
+  respondedAt: string | null;
+}

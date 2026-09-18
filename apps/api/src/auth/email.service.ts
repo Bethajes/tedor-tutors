@@ -17,20 +17,26 @@ export class EmailService implements OnModuleInit {
   private readonly inbox = new Map<string, EmailMessage>();
   private transporter: Transporter | null = null;
   private readonly smtpFrom: string;
+  private readonly smtpUser: string;
 
   constructor(private readonly config: ConfigService) {
     this.provider = this.config.get<string>('app.emailProvider') ?? 'mock';
     this.webOrigin = this.config.get<string>('app.webOrigin') ?? 'http://localhost:3000';
-    this.smtpFrom = this.config.get<string>('app.smtpFrom') ?? 'noreply@tedor.local';
+    this.smtpUser = this.config.get<string>('app.smtpUser') ?? '';
+    // Gmail and most providers reject a From address that isn't the
+    // authenticated account (or an approved alias), so fall back to the
+    // SMTP username when no explicit SMTP_FROM is configured.
+    const configuredFrom = this.config.get<string>('app.smtpFrom') ?? '';
+    this.smtpFrom = configuredFrom || this.smtpUser || 'noreply@tedor.local';
   }
 
   async onModuleInit(): Promise<void> {
     if (this.provider === 'smtp') {
       const host = this.config.get<string>('app.smtpHost');
-      const port = this.config.get<number>('app.smtpPort');
-      const user = this.config.get<string>('app.smtpUser');
+      const secure = this.config.get<boolean>('app.smtpSecure') ?? false;
+      const port = this.config.get<number>('app.smtpPort') ?? (secure ? 465 : 587);
+      const user = this.smtpUser;
       const pass = this.config.get<string>('app.smtpPassword');
-      const secure = this.config.get<boolean>('app.smtpSecure');
 
       if (!host) {
         this.logger.warn(

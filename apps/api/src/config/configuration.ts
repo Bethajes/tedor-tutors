@@ -42,7 +42,9 @@ export default (): { app: AppConfig } => ({
     smtpPort: parseInt(process.env.SMTP_PORT ?? '587', 10),
     smtpUser: process.env.SMTP_USER ?? '',
     smtpPassword: process.env.SMTP_PASSWORD ?? '',
-    smtpFrom: process.env.SMTP_FROM ?? 'noreply@tedor.local',
+    // Empty by default so EmailService falls back to SMTP_USER: providers
+    // like Gmail reject a From address that isn't the authenticated account.
+    smtpFrom: process.env.SMTP_FROM ?? '',
     smtpSecure: process.env.SMTP_SECURE === 'true',
   },
 });

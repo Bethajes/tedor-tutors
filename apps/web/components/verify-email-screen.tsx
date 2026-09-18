@@ -9,7 +9,14 @@ import { tokenStorage } from '../lib/token-storage';
 export function VerifyEmailScreen({ token }: { token?: string }) {
   const [status, setStatus] = useState<'idle' | 'working' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState<string | null>(null);
-  const [canResend] = useState(tokenStorage.getAccessToken() !== null);
+  // Read localStorage only after mount: the server prerender has no access
+  // to it, so reading during render would hydrate a different tree than the
+  // server sent (button vs. paragraph) and crash hydration for signed-in users.
+  const [canResend, setCanResend] = useState(false);
+
+  useEffect(() => {
+    setCanResend(tokenStorage.getAccessToken() !== null);
+  }, []);
 
   useEffect(() => {
     if (!token) {
