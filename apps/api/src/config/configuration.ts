@@ -9,11 +9,26 @@ export interface AppConfig {
   mobileOrigin: string;
   telegramBotToken: string;
   emailProvider: string;
+  smtpHost: string;
+  smtpPort: number;
+  smtpUser: string;
+  smtpPassword: string;
+  smtpFrom: string;
+  smtpSecure: boolean;
+}
+
+function parsePort(raw: string | undefined): number {
+  const parsed = parseInt(raw ?? '', 10);
+  // Guard against PORT=0 or garbage in the environment (e.g. an exported PORT=0
+  // from shell tooling): the web app's rewrite target is fixed at port 4000, so
+  // an ephemeral port would silently break the proxy.
+  if (!Number.isInteger(parsed) || parsed <= 0) return 4000;
+  return parsed;
 }
 
 export default (): { app: AppConfig } => ({
   app: {
-    port: parseInt(process.env.PORT ?? '4000', 10),
+    port: parsePort(process.env.PORT),
     nodeEnv: process.env.NODE_ENV ?? 'development',
     jwtAccessSecret: process.env.JWT_ACCESS_SECRET ?? '',
     jwtRefreshSecret: process.env.JWT_REFRESH_SECRET ?? '',
@@ -23,5 +38,11 @@ export default (): { app: AppConfig } => ({
     mobileOrigin: process.env.MOBILE_ORIGIN ?? '*',
     telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
     emailProvider: process.env.EMAIL_PROVIDER ?? 'mock',
+    smtpHost: process.env.SMTP_HOST ?? '',
+    smtpPort: parseInt(process.env.SMTP_PORT ?? '587', 10),
+    smtpUser: process.env.SMTP_USER ?? '',
+    smtpPassword: process.env.SMTP_PASSWORD ?? '',
+    smtpFrom: process.env.SMTP_FROM ?? 'noreply@tedor.local',
+    smtpSecure: process.env.SMTP_SECURE === 'true',
   },
 });

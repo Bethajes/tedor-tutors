@@ -10,6 +10,8 @@ import { PermissionsGuard } from './auth/permissions.guard';
 import { AuthModule } from './auth/auth.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
+import { ClientModule } from './client/client.module';
+import { MatchingModule } from './matching/matching.module';
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { UsersModule } from './users/users.module';
     PrismaModule,
     AuthModule,
     UsersModule,
+    ClientModule,
+    MatchingModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

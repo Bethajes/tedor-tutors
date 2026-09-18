@@ -2,11 +2,16 @@ import type {
   ApiFailure,
   ApiResponse,
   AuthTokens,
-  LogoutInput,
+  ChangePasswordRequest,
+  ClientProfile,
+  CreateLearnerRequest,
+  Learner,
+  LearnerList,
   PublicUser,
   RegisterRequest,
   SessionInfo,
-  ChangePasswordRequest,
+  UpdateClientProfileRequest,
+  UpdateLearnerRequest,
 } from '@tedor/types';
 
 export interface ApiClientOptions {
@@ -37,6 +42,20 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Thrown when the API itself could not be reached — network down, connection
+ * refused, DNS failure — as opposed to an HTTP error response from the API.
+ * The frontend can use this to show "can't reach the server" copy instead of
+ * blaming the user's input.
+ */
+export class ApiConnectionError extends Error {
+  constructor(cause?: unknown) {
+    super('Cannot reach the Tedor API. Check your connection and try again.');
+    this.name = 'ApiConnectionError';
+    if (cause !== undefined) this.cause = cause;
+  }
+}
+
 export interface ResponseMeta {
   rateLimit?: { limit: number; remaining: number; reset: number };
   [key: string]: unknown;
@@ -63,11 +82,18 @@ export class ApiClient {
     }
     if (body !== undefined) headers['Content-Type'] = 'application/json';
 
-    const response = await fetch(`${this.baseUrl}/api/v1${path}`, {
-      method,
-      headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}/api/v1${path}`, {
+        method,
+        headers,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+    } catch (error) {
+      // fetch only rejects for network-level failures (connection refused,
+      // DNS, CORS block, offline); HTTP error statuses still resolve.
+      throw new ApiConnectionError(error);
+    }
 
     const meta: ResponseMeta = {};
     const rateHeaders = [
@@ -214,5 +240,165 @@ export class ApiClient {
 
   logoutSession(sessionId: string): Promise<{ success: true }> {
     return this.raw(`/auth/sessions/${sessionId}`, { method: 'DELETE', auth: true });
+  }
+
+  getClientProfile(): Promise<ClientProfile> {
+    return this.raw('/client/profile', { auth: true });
+  }
+
+  updateClientProfile(input: UpdateClientProfileRequest): Promise<ClientProfile> {
+    return this.raw('/client/profile', { method: 'PATCH', body: input, auth: true });
+  }
+
+  uploadClientProfilePhoto(photo: Blob, filename: string): Promise<{ photoUrl: string }> {
+    const form = new FormData();
+    form.append('photo', photo, filename);
+    return this.requestForm<{ photoUrl: string }>('/client/profile/photo', form).then(({ data }) => data);
+  }
+
+  listLearners(): Promise<LearnerList> {
+    return this.raw('/client/learners', { auth: true });
+  }
+
+  createLearner(input: CreateLearnerRequest): Promise<Learner> {
+    return this.raw('/client/learners', { method: 'POST', body: input, auth: true });
+  }
+
+  getLearner(learnerId: string): Promise<Learner> {
+    return this.raw(`/client/learners/${learnerId}`, { auth: true });
+  }
+
+  updateLearner(learnerId: string, input: UpdateLearnerRequest): Promise<Learner> {
+    return this.raw(`/client/learners/${learnerId}`, { method: 'PATCH', body: input, auth: true });
+  }
+
+  deleteLearner(learnerId: string): Promise<{ success: true }> {
+    return this.raw(`/client/learners/${learnerId}`, { method: 'DELETE', auth: true });
+  }
+
+  getTutorRequest(requestId: string): Promise<{
+    id: string;
+    status: string;
+    subjects: string[];
+    academicLevels: string[];
+    teachingModes: string[];
+    location: string | null;
+    serviceArea: string | null;
+    notes: string | null;
+    schedule: Array<{ id: string; dayOfWeek: string; startTime: string; endTime: string }>;
+    ready: boolean;
+    createdAt: string;
+    updatedAt: string;
+  }> {
+    return this.raw(`/tutor-requests/${requestId}`, { auth: true });
+  }
+
+  listTutorRequestMatches(requestId: string): Promise<{
+    matches: Array<{
+      id: string;
+      tutor: {
+        id: string;
+        name: string;
+        photo: string | null;
+        subjects: string[];
+        levels: string[];
+        experience: number | null;
+        rating: number | null;
+        teachingModes: string[];
+        serviceAreas: string[];
+        location: string | null;
+        hourlyRate: number | null;
+        currency: string | null;
+      };
+      score: number;
+      factorScores: Record<string, number>;
+      matchReasons: string[];
+      status: string;
+    }>;
+    count: number;
+    message?: string;
+    request?: {
+      id: string;
+      status: string;
+      ready: boolean;
+      subjects: string[];
+      academicLevels: string[];
+      teachingModes: string[];
+    };
+  }> {
+    return this.raw(`/tutor-requests/${requestId}/matches`, { auth: true });
+  }
+
+  generateTutorRequestMatches(requestId: string, limit?: number): Promise<{
+    matches: Array<{
+      id: string;
+      tutor: {
+        id: string;
+        name: string;
+        photo: string | null;
+        subjects: string[];
+        levels: string[];
+        experience: number | null;
+        rating: number | null;
+        teachingModes: string[];
+        serviceAreas: string[];
+        location: string | null;
+        hourlyRate: number | null;
+        currency: string | null;
+      };
+      score: number;
+      factorScores: Record<string, number>;
+      matchReasons: string[];
+      status: string;
+    }>;
+    count: number;
+    message?: string;
+  }> {
+    const query = typeof limit === 'number' ? `?limit=${limit}` : '';
+    return this.raw(`/tutor-requests/${requestId}/matches${query}`, { method: 'POST', auth: true });
+  }
+
+  getTutorProfile(tutorId: string): Promise<{
+    id: string;
+    name: string;
+    photo: string | null;
+    bio: string | null;
+    subjects: string[];
+    levels: string[];
+    experience: number;
+    languages: string[];
+    teachingModes: string[];
+    serviceAreas: string[];
+    location: string | null;
+    hourlyRate: number | null;
+    currency: string | null;
+    availability: Array<{ dayOfWeek: string; startTime: string; endTime: string }>;
+    rating: number | null;
+  }> {
+    return this.raw(`/tutors/${tutorId}`, { auth: true });
+  }
+
+  private async requestForm<T>(path: string, form: FormData): Promise<{ data: T; meta: ResponseMeta }> {
+    const token = await this.options.getAccessToken?.();
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    else throw new ApiError(401, 'UNAUTHORIZED', 'No access token available');
+
+    const response = await fetch(`${this.baseUrl}/api/v1${path}`, {
+      method: 'POST',
+      headers,
+      body: form,
+    });
+    const payload = (await response.json().catch(() => null)) as ApiResponse<T> | null;
+    if (!payload || !payload.success) {
+      const error = payload as ApiFailure | null;
+      throw new ApiError(
+        response.status,
+        error?.error.code ?? 'INTERNAL_ERROR',
+        error?.error.message ?? this.messageForStatus(response.status),
+        error?.error.details,
+      );
+    }
+    return { data: payload.data, meta: {} };
   }
 }

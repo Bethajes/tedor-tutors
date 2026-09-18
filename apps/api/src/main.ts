@@ -1,7 +1,32 @@
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { BadRequestException, Logger, ValidationError, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+
+interface FieldValidationDetail {
+  field: string;
+  message: string;
+}
+
+/**
+ * Turn class-validator errors into `{ field, message }` pairs so API clients
+ * can map server-side validation failures onto individual form inputs.
+ */
+function collectFieldDetails(errors: ValidationError[], parentPath?: string): FieldValidationDetail[] {
+  const details: FieldValidationDetail[] = [];
+  for (const error of errors) {
+    const field = parentPath ? `${parentPath}.${error.property}` : error.property;
+    if (error.constraints) {
+      for (const message of Object.values(error.constraints)) {
+        details.push({ field, message });
+      }
+    }
+    if (error.children?.length) {
+      details.push(...collectFieldDetails(error.children, field));
+    }
+  }
+  return details;
+}
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { bufferLogs: false });
@@ -14,6 +39,13 @@ async function bootstrap(): Promise<void> {
       transform: true,
       forbidNonWhitelisted: true,
       transformOptions: { enableImplicitConversion: false },
+      exceptionFactory: (errors) => {
+        const details = collectFieldDetails(errors);
+        return new BadRequestException({
+          message: details.map((detail) => detail.message),
+          details,
+        });
+      },
     }),
   );
 

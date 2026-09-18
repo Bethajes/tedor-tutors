@@ -10,25 +10,27 @@
     "start": "next start -p 3000"
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.9.1",
     "@tedor/api-client": "workspace:*",
     "@tedor/types": "workspace:*",
     "@tedor/ui": "workspace:*",
     "@tedor/validation": "workspace:*",
+    "lucide-react": "^1.46.0",
     "next": "^15.1.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-hook-form": "^7.88.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
     "@tedor/config": "workspace:*",
     "@tedor/eslint-config": "workspace:*",
     "@types/node": "^22.10.5",
     "@types/react": "^19.0.3",
     "@types/react-dom": "^19.0.2",
-    "autoprefixer": "^10.6.1",
     "eslint": "^9.17.0",
-    "postcss": "^8.5.28",
-    "tailwindcss": "^3.4.19",
+    "tailwindcss": "^4.3.3",
     "typescript": "5.7.3"
   }
 }

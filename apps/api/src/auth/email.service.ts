@@ -1,5 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as nodemailer from 'nodemailer';
+import type { Transporter } from 'nodemailer';
 
 export interface EmailMessage {
   to: string;
@@ -8,27 +10,60 @@ export interface EmailMessage {
 }
 
 @Injectable()
-export class EmailService {
+export class EmailService implements OnModuleInit {
   private readonly logger = new Logger('EmailService');
   private readonly provider: string;
+  private readonly webOrigin: string;
   private readonly inbox = new Map<string, EmailMessage>();
+  private transporter: Transporter | null = null;
+  private readonly smtpFrom: string;
 
-  constructor(config: ConfigService) {
-    this.provider = config.get<string>('app.emailProvider') ?? 'mock';
+  constructor(private readonly config: ConfigService) {
+    this.provider = this.config.get<string>('app.emailProvider') ?? 'mock';
+    this.webOrigin = this.config.get<string>('app.webOrigin') ?? 'http://localhost:3000';
+    this.smtpFrom = this.config.get<string>('app.smtpFrom') ?? 'noreply@tedor.local';
   }
 
-  // In-memory delivery used by the mail mock so tests and local tooling can
-  // read verification/reset links without a real SMTP provider.
+  async onModuleInit(): Promise<void> {
+    if (this.provider === 'smtp') {
+      const host = this.config.get<string>('app.smtpHost');
+      const port = this.config.get<number>('app.smtpPort');
+      const user = this.config.get<string>('app.smtpUser');
+      const pass = this.config.get<string>('app.smtpPassword');
+      const secure = this.config.get<boolean>('app.smtpSecure');
+
+      if (!host) {
+        this.logger.warn(
+          'SMTP provider selected but SMTP_HOST is not configured; falling back to mock delivery.',
+        );
+        return;
+      }
+
+      try {
+        this.transporter = nodemailer.createTransport({
+          host,
+          port,
+          secure,
+          auth: user && pass ? { user, pass } : undefined,
+        });
+        await this.transporter.verify();
+        this.logger.log(`SMTP transport ready (host=${host}, port=${port}, secure=${secure})`);
+      } catch (error) {
+        this.logger.warn(
+          `Failed to initialize SMTP transport: ${error instanceof Error ? error.message : String(error)}. Falling back to mock delivery.`,
+        );
+        this.transporter = null;
+      }
+    }
+  }
+
   lastMessageFor(to: string): EmailMessage | undefined {
     return this.inbox.get(to);
   }
 
   async send(message: EmailMessage): Promise<void> {
-    if (this.provider === 'mock') {
+    if (this.provider === 'mock' || !this.transporter) {
       this.inbox.set(message.to, message);
-      // Development-only: prints the link containing the token/code so flows can
-      // be exercised locally. In production providers (e.g. SMTP) the token is
-      // never logged.
       this.logger.warn(`[mock-email] to=${message.to} | ${message.subject}\n${message.body}`);
       return;
     }
@@ -43,16 +78,55 @@ export class EmailService {
     return `${this.baseUrl()}/reset-password?token=${token}`;
   }
 
-  private baseUrl(): string {
-    return process.env.WEB_ORIGIN ?? 'http://localhost:3000';
+  async sendWelcomeEmail(to: string, userName: string): Promise<void> {
+    await this.send({
+      to,
+      subject: 'Welcome to Tedor Tutors!',
+      body: `Hi ${userName},\n\nWelcome to Tedor Tutors! We're excited to have you on board.\n\nYour account has been created successfully. Please verify your email address to get started.\n\nIf you have any questions, feel free to reach out to our support team.\n\nBest regards,\nThe Tedor Tutors Team`,
+    });
   }
 
-  private async sendViaProvider(_message: EmailMessage): Promise<void> {
-    // Foundation hook for a transactional email provider (e.g. nodemailer/SES).
-    // Implemented in the email-infrastructure branch; until then, EmailService
-    // always uses the mock provider, so no secrets are ever written to logs.
-    this.logger.warn(
-      `Email provider "${this.provider}" is not configured yet; falling back to mock delivery.`,
-    );
+  async sendLoginNotification(
+    to: string,
+    userName: string,
+    details: { ip?: string; userAgent?: string; time: Date },
+  ): Promise<void> {
+    const ipText = details.ip ? details.ip : 'unknown';
+    const uaText = details.userAgent ? details.userAgent : 'unknown device';
+    const timeText = details.time.toLocaleString();
+    await this.send({
+      to,
+      subject: 'New login to your Tedor account',
+      body: `Hi ${userName},\n\nA new login was detected on your Tedor account.\n\nDetails:\n- Time: ${timeText}\n- IP: ${ipText}\n- Device: ${uaText}\n\nIf this was you, you can safely ignore this email.\n\nIf you did not perform this login, please change your password immediately and review your account security settings.\n\nBest regards,\nThe Tedor Tutors Team`,
+    });
+  }
+
+  private baseUrl(): string {
+    return this.webOrigin;
+  }
+
+  private async sendViaProvider(message: EmailMessage): Promise<void> {
+    if (!this.transporter) {
+      this.logger.warn(
+        `Email provider "${this.provider}" is not configured yet; falling back to mock delivery.`,
+      );
+      this.inbox.set(message.to, message);
+      this.logger.warn(`[mock-email] to=${message.to} | ${message.subject}\n${message.body}`);
+      return;
+    }
+
+    try {
+      await this.transporter.sendMail({
+        from: this.smtpFrom,
+        to: message.to,
+        subject: message.subject,
+        text: message.body,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to send email to ${message.to}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error;
+    }
   }
 }

@@ -21,6 +21,58 @@ enum AccountStatus {
   DISABLED
 }
 
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum TeachingMode {
+  IN_PERSON
+  ONLINE
+  BOTH
+}
+
+enum TutorProfileStatus {
+  INACTIVE
+  ACTIVE
+  SUSPENDED
+}
+
+enum RequestStatus {
+  PENDING
+  MATCHED
+  COMPLETED
+  CANCELLED
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum MatchStatus {
+  RECOMMENDED
+  VIEWED
+  SELECTED
+  DECLINED
+  EXPIRED
+}
+
+enum OpportunityStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  CANCELLED
+}
+
 model Role {
   id          String           @id @default(cuid())
   name        UserRoleName     @unique
@@ -73,6 +125,11 @@ model User {
   sessions                 Session[]
   emailVerificationTokens  EmailVerificationToken[]
   passwordResetTokens      PasswordResetToken[]
+  clientProfile            ClientProfile?
+  tutorProfile             TutorProfile?
+  tutorRequests            TutorRequest[]
+  tutorMatches             Match[]
+  tutorOpportunities       TutorOpportunity[]       @relation("TutorOpportunities")
 
   @@index([email])
   @@index([roleId])
@@ -122,4 +179,168 @@ model PasswordResetToken {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+model ClientProfile {
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName         String
+  lastName          String
+  photoUrl          String?
+  phone             String?
+  preferredLanguage String?
+  location          String?
+  address           String?
+  bio               String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  learners Learner[]
+
+  @@index([userId])
+}
+
+model Learner {
+  id              String    @id @default(cuid())
+  clientProfileId String
+  clientProfile   ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  firstName       String
+  lastName        String
+  dateOfBirth     DateTime?
+  gender          Gender?
+  grade           String?
+  school          String?
+  curriculum      String?
+  subjects        String[]
+  goals           String?
+  preferredLanguage String?
+  notes           String?
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([clientProfileId])
+  @@index([clientProfileId, deletedAt])
+}
+
+model TutorProfile {
+  id           String              @id @default(cuid())
+  userId       String              @unique
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status       TutorProfileStatus  @default(ACTIVE)
+  bio          String?
+  photoUrl     String?
+  location     String?
+  serviceAreas String[] @default([])
+  teachingModes TeachingMode[] @default([])
+  hourlyRate   Int?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  subjects      TutorSubject[]
+  availability  TutorAvailability[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model TutorSubject {
+  id             String        @id @default(cuid())
+  tutorProfileId String
+  tutorProfile   TutorProfile  @relation(fields: [tutorProfileId], references: [id], onDelete: Cascade)
+  subject        String
+  academicLevels String[] @default([])
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([tutorProfileId])
+  @@index([subject])
+}
+
+model TutorAvailability {
+  id             String        @id @default(cuid())
+  tutorProfileId String
+  tutorProfile   TutorProfile  @relation(fields: [tutorProfileId], references: [id], onDelete: Cascade)
+  dayOfWeek      DayOfWeek
+  startTime      String
+  endTime        String
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([tutorProfileId])
+}
+
+model TutorRequest {
+  id            String        @id @default(cuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status        RequestStatus @default(PENDING)
+  subjects      String[] @default([])
+  academicLevels String[] @default([])
+  teachingModes TeachingMode[] @default([])
+  location      String?
+  serviceArea   String?
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  schedule TutorRequestSchedule[]
+  matches  Match[]
+  opportunities TutorOpportunity[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model TutorRequestSchedule {
+  id            String       @id @default(cuid())
+  tutorRequestId String
+  tutorRequest  TutorRequest @relation(fields: [tutorRequestId], references: [id], onDelete: Cascade)
+  dayOfWeek     DayOfWeek
+  startTime     String
+  endTime       String
+  createdAt     DateTime     @default(now())
+
+  @@index([tutorRequestId])
+}
+
+model Match {
+  id             String        @id @default(cuid())
+  tutorRequestId String
+  tutorRequest   TutorRequest  @relation(fields: [tutorRequestId], references: [id], onDelete: Cascade)
+  tutorId        String
+  tutor          User          @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  score          Int
+  factorScores   Json
+  matchReasons   Json
+  status         MatchStatus   @default(RECOMMENDED)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  opportunity TutorOpportunity?
+
+  @@unique([tutorRequestId, tutorId])
+  @@index([tutorRequestId])
+  @@index([tutorId])
+  @@index([status])
+  @@index([score(sort: Desc)])
+}
+
+model TutorOpportunity {
+  id             String            @id @default(cuid())
+  matchId        String            @unique
+  match          Match             @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  tutorId        String
+  tutor          User              @relation("TutorOpportunities", fields: [tutorId], references: [id], onDelete: Cascade)
+  tutorRequestId String
+  tutorRequest   TutorRequest      @relation(fields: [tutorRequestId], references: [id], onDelete: Cascade)
+  status         OpportunityStatus @default(PENDING)
+  respondedAt    DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([tutorId])
+  @@index([tutorRequestId])
+  @@index([status])
 }
