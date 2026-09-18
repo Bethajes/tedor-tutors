@@ -66,10 +66,10 @@ export class AuthService {
         throw error;
       });
 
-    await this.sendVerificationEmail(user.email);
     this.email.sendWelcomeEmail(user.email, user.name).catch((error) => {
       this.logger?.error?.(`Failed to send welcome email to ${user.email}: ${error instanceof Error ? error.message : String(error)}`);
     });
+    await this.sendVerificationEmail(user.email);
 
     const session = await this.tokens.createSession(user.id, ctx);
     const accessToken = this.tokens.issueAccessToken({
@@ -239,7 +239,7 @@ export class AuthService {
   }
 
   async verifyEmail(dto: VerifyEmailDto): Promise<void> {
-    const userId = await this.tokens.consumeEmailVerificationToken(dto.token);
+    const userId = await this.tokens.consumeEmailVerificationCode(dto.code);
     await this.prisma.user.update({
       where: { id: userId },
       data: { emailVerifiedAt: new Date(), status: 'ACTIVE' },
@@ -298,11 +298,11 @@ export class AuthService {
 
   private async sendVerificationEmail(email: string): Promise<void> {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { email }, select: { id: true } });
-    const token = await this.tokens.createEmailVerificationToken(user.id);
+    const code = await this.tokens.createEmailVerificationCode(user.id);
     await this.email.send({
       to: email,
-      subject: 'Verify your Tedor email',
-      body: `Verify your email address: ${this.email.buildVerifyEmailLink(token)}`,
+      subject: 'Your Tedor verification code',
+      body: `Your Tedor email verification code is ${code}\n\nEnter this code on the verification screen to activate your account. This code expires in 24 hours.`,
     });
   }
 

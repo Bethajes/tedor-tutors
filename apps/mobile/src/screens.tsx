@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { PublicUser, RegisterRequest } from '@tedor/types';
 import { loginSchema, registerSchema, resetPasswordSchema, verifyEmailSchema } from '@tedor/validation';
 import { api } from './api';
@@ -130,7 +130,7 @@ function ForgotPasswordScreen({ onNavigate }: { onNavigate: Navigate }) {
   );
 }
 
-function ResetPasswordScreen({ onNavigate, onAuthed }: { onNavigate: Navigate; onAuthed: Authed }) {
+function ResetPasswordScreen({ onNavigate }: { onNavigate: Navigate; onAuthed: Authed }) {
   const [token, setToken] = useState('');
   const [password, setPassword] = useState('');
   const { busy, setBusy, error, setError } = useFormState();
@@ -164,20 +164,20 @@ function ResetPasswordScreen({ onNavigate, onAuthed }: { onNavigate: Navigate; o
 }
 
 function VerifyEmailScreen({ onAuthed, user }: { onAuthed: Authed; user: PublicUser | null }) {
-  const [token, setToken] = useState('');
+  const [code, setCode] = useState('');
   const [done, setDone] = useState(false);
   const { busy, setBusy, error, setError } = useFormState();
 
   async function submit() {
     setError(null);
-    const parsed = verifyEmailSchema.safeParse({ token });
+    const parsed = verifyEmailSchema.safeParse({ code });
     if (!parsed.success) {
-      setError('Paste the link or token from your verification email');
+      setError('Enter the 6-digit code from your verification email');
       return;
     }
     setBusy(true);
     try {
-      await api.verifyEmail(parsed.data.token);
+      await api.verifyEmail(parsed.data.code);
       setDone(true);
       setBusy(false);
     } catch (err) {
@@ -206,9 +206,9 @@ function VerifyEmailScreen({ onAuthed, user }: { onAuthed: Authed; user: PublicU
         </>
       ) : (
         <>
-          <Text style={styles.hint}>Paste the token/link from your verification email.</Text>
+          <Text style={styles.hint}>Enter the 6-digit code from your verification email.</Text>
           <ErrorText message={error} />
-          <Field label="Verification token" value={token} onChangeText={setToken} autoCapitalize="none" />
+          <Field label="Verification code" value={code} onChangeText={setCode} autoCapitalize="none" keyboardType="number-pad" maxLength={6} />
           <PrimaryButton label="Verify email" onPress={() => void submit()} busy={busy} />
           {user ? <LinkButton label="Resend verification email" onPress={() => void resend()} /> : null}
         </>
@@ -289,4 +289,5 @@ const styles = StyleSheet.create({
   hint: { color: '#64748b' },
   home: { flex: 1, justifyContent: 'center', gap: 8, padding: 20 },
   muted: { color: '#64748b' },
+  screenTitle: { fontSize: 24, fontWeight: '700', color: '#0f172a' },
 });

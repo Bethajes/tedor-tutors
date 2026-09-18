@@ -86,9 +86,9 @@ export class ResetPasswordDto {
 }
 
 export class VerifyEmailDto {
+  @Matches(/^\d{6}$/, { message: 'code must be a 6-digit number' })
   @IsString()
-  @Length(1, 2048)
-  token!: string;
+  code!: string;
 }
 
 export class ResendVerificationDto {

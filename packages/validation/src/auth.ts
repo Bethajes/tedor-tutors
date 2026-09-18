@@ -49,7 +49,7 @@ export const resetPasswordSchema = z.object({
 });
 
 export const verifyEmailSchema = z.object({
-  token: z.string().min(1, 'token is required').max(2048),
+  code: z.string().regex(/^\d{6}$/, 'Enter the 6-digit verification code'),
 });
 
 export const resendVerificationSchema = z.object({

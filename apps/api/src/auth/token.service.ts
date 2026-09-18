@@ -109,27 +109,28 @@ export class TokenService {
     });
   }
 
-  async createEmailVerificationToken(userId: string): Promise<string> {
-    const raw = generateOpaqueToken(32);
+  async createEmailVerificationCode(userId: string): Promise<string> {
+    const code = this.generateVerificationCode();
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
     await this.prisma.emailVerificationToken.create({
       data: {
         userId,
-        tokenHash: sha256(raw),
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        tokenHash: sha256(code),
+        expiresAt,
       },
     });
-    return raw;
+    return code;
   }
 
-  async consumeEmailVerificationToken(token: string): Promise<string> {
+  async consumeEmailVerificationCode(code: string): Promise<string> {
     const record = await this.prisma.emailVerificationToken.findUnique({
-      where: { tokenHash: sha256(token) },
+      where: { tokenHash: sha256(code) },
     });
     if (!record || record.consumedAt) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, { code: 'TOKEN_INVALID', message: 'Invalid verification token' });
+      throw new ApiException(HttpStatus.BAD_REQUEST, { code: 'CODE_INVALID', message: 'Invalid verification code' });
     }
     if (record.expiresAt.getTime() <= Date.now()) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, { code: 'TOKEN_EXPIRED', message: 'Verification token has expired' });
+      throw new ApiException(HttpStatus.BAD_REQUEST, { code: 'CODE_EXPIRED', message: 'Verification code has expired' });
     }
     await this.prisma.emailVerificationToken.update({
       where: { id: record.id },
@@ -169,6 +170,10 @@ export class TokenService {
       data: { consumedAt: new Date() },
     });
     return record.userId;
+  }
+
+  private generateVerificationCode(): string {
+    return String(Math.floor(100000 + Math.random() * 900000));
   }
 
   private secondsFor(ttl: string): number {

@@ -224,8 +224,8 @@ export class ApiClient {
     return this.raw('/auth/reset-password', { method: 'POST', body: { token, password } });
   }
 
-  verifyEmail(token: string): Promise<{ success: true }> {
-    return this.raw('/auth/verify-email', { method: 'POST', body: { token } });
+  verifyEmail(code: string): Promise<{ success: true }> {
+    return this.raw('/auth/verify-email', { method: 'POST', body: { code } });
   }
 
   resendVerification(email: string): Promise<{ success: true }> {

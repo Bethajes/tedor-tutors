@@ -21,7 +21,8 @@ interface FieldProps {
   placeholder?: string;
   secureTextEntry?: boolean;
   autoCapitalize?: 'none' | 'sentences';
-  keyboardType?: 'email-address' | 'phone-pad';
+  keyboardType?: 'email-address' | 'phone-pad' | 'number-pad';
+  maxLength?: number;
 }
 
 export function Field({
@@ -32,6 +33,7 @@ export function Field({
   secureTextEntry,
   autoCapitalize = 'sentences',
   keyboardType,
+  maxLength,
 }: FieldProps) {
   return (
     <View style={styles.field}>
@@ -45,6 +47,7 @@ export function Field({
         secureTextEntry={secureTextEntry}
         autoCapitalize={autoCapitalize}
         keyboardType={keyboardType}
+        maxLength={maxLength}
       />
     </View>
   );
