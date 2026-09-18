@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
@@ -16,7 +17,7 @@ import { UserRoleName } from '@prisma/client';
 import { CurrentUser, Roles, type AuthenticatedUser } from '../common/auth.decorators';
 import { ClientService, type UploadedPhotoFile } from './client.service';
 import { UpdateClientProfileDto } from './dto/client-profile.dto';
-import { CreateLearnerDto, UpdateLearnerDto } from './dto/learner.dto';
+import { CreateLearnerDto, ListLearnersQueryDto, UpdateLearnerDto } from './dto/learner.dto';
 
 @Controller('client')
 @Roles(UserRoleName.CLIENT)
@@ -26,6 +27,11 @@ export class ClientController {
   @Get('profile')
   getProfile(@CurrentUser() user: AuthenticatedUser) {
     return this.client.getProfile(user.userId);
+  }
+
+  @Get('dashboard')
+  getDashboard(@CurrentUser() user: AuthenticatedUser) {
+    return this.client.getDashboard(user.userId);
   }
 
   @Patch('profile')
@@ -49,8 +55,8 @@ export class ClientController {
   }
 
   @Get('learners')
-  listLearners(@CurrentUser() user: AuthenticatedUser) {
-    return this.client.listLearners(user.userId);
+  listLearners(@CurrentUser() user: AuthenticatedUser, @Query() query: ListLearnersQueryDto) {
+    return this.client.listLearners(user.userId, query);
   }
 
   @Post('learners')

@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 describe('ClientService', () => {
   let service: ClientService;
   let prisma: {
+    $transaction: jest.Mock;
     clientProfile: {
       findUnique: jest.Mock;
       findUniqueOrThrow: jest.Mock;
@@ -14,12 +15,14 @@ describe('ClientService', () => {
     user: {
       findUnique: jest.Mock;
       findUniqueOrThrow: jest.Mock;
+      update: jest.Mock;
     };
     learner: {
       findMany: jest.Mock;
       findFirst: jest.Mock;
       create: jest.Mock;
       update: jest.Mock;
+      count: jest.Mock;
     };
   };
 
@@ -77,19 +80,21 @@ describe('ClientService', () => {
     update: jest.fn(),
     findMany: jest.fn(),
     findFirst: jest.fn(),
+    count: jest.fn(),
   });
 
   beforeEach(async () => {
+    const clientProfile = mockDelegate();
+    const user = mockDelegate();
+    const learner = mockDelegate();
+    const prismaMock: Record<string, unknown> = { clientProfile, user, learner };
+    prismaMock.$transaction = jest.fn(async (cb: (tx: unknown) => unknown) => cb(prismaMock));
     const module = await Test.createTestingModule({
       providers: [
         ClientService,
         {
           provide: PrismaService,
-          useValue: {
-            clientProfile: mockDelegate(),
-            user: mockDelegate(),
-            learner: mockDelegate(),
-          },
+          useValue: prismaMock,
         },
       ],
     }).compile();
@@ -149,6 +154,32 @@ describe('ClientService', () => {
       expect(prisma.clientProfile.update).toHaveBeenCalledWith({
         where: { userId },
         data: { bio: null },
+      });
+    });
+
+    it('trims names and syncs the account display name', async () => {
+      prisma.clientProfile.findUnique.mockResolvedValue(profileRecord);
+      prisma.clientProfile.update.mockResolvedValue(profileRecord);
+      prisma.user.update.mockResolvedValue(userRecord);
+      prisma.user.findUniqueOrThrow.mockResolvedValue(userRecord);
+
+      await service.updateProfile(userId, { firstName: '  Ada  ', lastName: 'Lovelace  Smith ' });
+
+      expect(prisma.clientProfile.update).toHaveBeenCalledWith({
+        where: { userId },
+        data: { firstName: 'Ada', lastName: 'Lovelace Smith' },
+      });
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: userId },
+        data: { name: 'Ada Lovelace Smith' },
+      });
+    });
+
+    it('rejects blank names', async () => {
+      prisma.clientProfile.findUnique.mockResolvedValue(profileRecord);
+
+      await expect(service.updateProfile(userId, { firstName: '   ' })).rejects.toMatchObject({
+        status: 400,
       });
     });
   });
@@ -287,6 +318,89 @@ describe('ClientService', () => {
       prisma.learner.findFirst.mockResolvedValue(null);
 
       await expect(service.deleteLearner(userId, 'not-mine')).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('normalizes subjects on create (trims, drops empties, dedupes)', async () => {
+      prisma.clientProfile.findUnique.mockResolvedValue(profileRecord);
+      prisma.learner.count.mockResolvedValue(0);
+      prisma.learner.create.mockResolvedValue({ ...learnerRecord, subjects: ['Math', 'Science'] });
+
+      await service.createLearner(userId, {
+        firstName: 'Grace',
+        lastName: 'Hopper',
+        subjects: ['  Math ', 'math', '', 'Science'],
+      });
+
+      expect(prisma.learner.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ subjects: ['Math', 'Science'] }),
+      });
+    });
+
+    it('rejects new learners once the per-account limit is reached', async () => {
+      prisma.clientProfile.findUnique.mockResolvedValue(profileRecord);
+      prisma.learner.count.mockResolvedValue(25);
+
+      await expect(
+        service.createLearner(userId, { firstName: 'Grace', lastName: 'Hopper' }),
+      ).rejects.toMatchObject({ status: 400 });
+    });
+
+    it('rejects impossible calendar dates', async () => {
+      prisma.clientProfile.findUnique.mockResolvedValue(profileRecord);
+      prisma.learner.count.mockResolvedValue(0);
+
+      await expect(
+        service.createLearner(userId, { firstName: 'Grace', lastName: 'Hopper', dateOfBirth: '2015-02-30' }),
+      ).rejects.toMatchObject({ status: 400 });
+    });
+
+    it('supports search and pagination when listing learners', async () => {
+      const second = { ...learnerRecord, id: 'learner-2', firstName: 'Alan', lastName: 'Turing', school: 'Princeton', subjects: [] as string[] };
+      prisma.clientProfile.findUnique.mockResolvedValue(profileRecord);
+      prisma.learner.findMany.mockResolvedValue([learnerRecord, second]);
+
+      const searched = await service.listLearners(userId, { search: 'grace' });
+      expect(searched.total).toBe(1);
+      expect(searched.items[0].firstName).toBe('Grace');
+
+      const paged = await service.listLearners(userId, { limit: 1, offset: 1 });
+      expect(paged.total).toBe(2);
+      expect(paged.items).toHaveLength(1);
+      expect(paged.items[0].id).toBe('learner-2');
+    });
+
+    it('normalizes subjects on update', async () => {
+      prisma.clientProfile.findUnique.mockResolvedValue(profileRecord);
+      prisma.learner.findFirst.mockResolvedValue(learnerRecord);
+      prisma.learner.update.mockResolvedValue({ ...learnerRecord, subjects: ['Math'] });
+
+      await service.updateLearner(userId, 'learner-1', { subjects: ['Math', ' math ', ''] });
+
+      expect(prisma.learner.update).toHaveBeenCalledWith({
+        where: { id: 'learner-1' },
+        data: expect.objectContaining({ subjects: ['Math'] }),
+      });
+    });
+  });
+
+  describe('getDashboard', () => {
+    it('returns profile, stats, and recent learners in one payload', async () => {
+      prisma.clientProfile.findUnique.mockResolvedValue({
+        ...profileRecord,
+        phone: '+12025550123',
+        bio: 'Looking for a math tutor.',
+      });
+      prisma.user.findUniqueOrThrow.mockResolvedValue(userRecord);
+      prisma.learner.findMany.mockResolvedValue([learnerRecord]);
+
+      const result = await service.getDashboard(userId);
+
+      expect(result.profile.firstName).toBe('Ada');
+      expect(result.stats.totalLearners).toBe(1);
+      expect(result.stats.subjectsCovered).toBe(1);
+      expect(result.stats.emailVerified).toBe(true);
+      expect(result.stats.profileCompleteness).toBeGreaterThan(0);
+      expect(result.recentLearners).toHaveLength(1);
     });
   });
 });

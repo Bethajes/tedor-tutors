@@ -60,14 +60,37 @@ const GENDER = z.enum(['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY']).optional
 const DATE_OF_BIRTH = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'dateOfBirth must be a valid ISO-8601 date (YYYY-MM-DD)')
-  .refine((value) => !Number.isNaN(new Date(value).getTime()), 'dateOfBirth must be a real date')
-  .refine((value) => new Date(value).getTime() <= Date.now(), 'dateOfBirth cannot be in the future')
+  .refine((value) => {
+    const [year, month, day] = value.split('-').map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return (
+      date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+    );
+  }, 'dateOfBirth must be a real calendar date')
+  .refine((value) => new Date(`${value}T00:00:00Z`).getTime() <= Date.now(), 'dateOfBirth cannot be in the future')
+  .refine((value) => {
+    const oldest = new Date();
+    oldest.setFullYear(oldest.getFullYear() - 120);
+    return new Date(`${value}T00:00:00Z`).getTime() >= oldest.getTime();
+  }, 'dateOfBirth must be within the last 120 years')
   .optional();
 
 const SUBJECTS = z
   .array(z.string().trim().min(1, 'Subject cannot be empty').max(120))
   .max(20, 'You can add at most 20 subjects')
-  .transform((items) => items.map((item) => item.trim()).filter(Boolean))
+  .transform((items) => {
+    const seen = new Set<string>();
+    const cleaned: string[] = [];
+    for (const item of items) {
+      const value = item.trim().replace(/\s+/g, ' ');
+      if (!value) continue;
+      const key = value.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      cleaned.push(value);
+    }
+    return cleaned;
+  })
   .optional();
 
 export const createLearnerSchema = z.object({

@@ -16,17 +16,67 @@ export interface UploadedPhotoFile {
 
 const MAX_PHOTO_BYTES = 5_000_000;
 const FUTURE_DOB_MESSAGE = 'dateOfBirth cannot be in the future';
+const MAX_SUBJECTS = 20;
+const MAX_SUBJECT_LENGTH = 120;
+const MAX_LEARNERS_PER_CLIENT = 25;
+const MAX_AGE_YEARS = 120;
+const DEFAULT_LEARNERS_LIMIT = 50;
+const MAX_LEARNERS_LIMIT = 100;
+
+export { MAX_LEARNERS_PER_CLIENT, MAX_SUBJECTS };
+
+export interface ListLearnersOptions {
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
 
 @Injectable()
 export class ClientService {
   constructor(private readonly prisma: PrismaService) {}
 
   private splitName(name: string): { firstName: string; lastName: string } {
-    const parts = name.trim().split(/\s+/);
+    const parts = name.trim().split(/\s+/).filter(Boolean);
     return {
       firstName: parts[0] ?? '',
       lastName: parts.slice(1).join(' ') ?? '',
     };
+  }
+
+  private cleanNamePart(value: string | undefined, field: 'firstName' | 'lastName'): string | undefined {
+    if (value === undefined) return undefined;
+    const cleaned = value.trim().replace(/\s+/g, ' ');
+    if (!cleaned) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, {
+        code: 'VALIDATION_FAILED',
+        message: `${field} cannot be blank`,
+      });
+    }
+    return cleaned;
+  }
+
+  /**
+   * Normalize a subjects list: trim entries, drop empties and overlong
+   * values, de-duplicate case-insensitively (keeping the first casing),
+   * and cap the list length. Never throws — DTO validation already
+   * rejects malformed payloads; this is defense-in-depth so stored data
+   * stays clean no matter the caller.
+   */
+  private normalizeSubjects(subjects: string[] | undefined | null): string[] | undefined {
+    if (subjects === undefined || subjects === null) return subjects ?? undefined;
+    const seen = new Set<string>();
+    const normalized: string[] = [];
+    for (const raw of subjects) {
+      if (typeof raw !== 'string') continue;
+      const cleaned = raw.trim().replace(/\s+/g, ' ');
+      if (!cleaned || cleaned.length > MAX_SUBJECT_LENGTH) continue;
+      const key = cleaned.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      normalized.push(cleaned);
+      if (normalized.length >= MAX_SUBJECTS) break;
+    }
+    return normalized;
   }
 
   private async getOrCreateProfile(userId: string) {
@@ -120,11 +170,14 @@ export class ClientService {
   }
 
   async updateProfile(userId: string, dto: UpdateClientProfileDto) {
-    await this.getOrCreateProfile(userId);
+    const existing = await this.getOrCreateProfile(userId);
+
+    const firstName = this.cleanNamePart(dto.firstName, 'firstName');
+    const lastName = this.cleanNamePart(dto.lastName, 'lastName');
 
     const data: Prisma.ClientProfileUpdateInput = {};
-    if (dto.firstName !== undefined) data.firstName = dto.firstName;
-    if (dto.lastName !== undefined) data.lastName = dto.lastName;
+    if (firstName !== undefined) data.firstName = firstName;
+    if (lastName !== undefined) data.lastName = lastName;
     if (dto.photoUrl !== undefined) data.photoUrl = dto.photoUrl ?? null;
     if (dto.phone !== undefined) data.phone = dto.phone ?? null;
     if (dto.preferredLanguage !== undefined) data.preferredLanguage = dto.preferredLanguage ?? null;
@@ -132,8 +185,22 @@ export class ClientService {
     if (dto.address !== undefined) data.address = dto.address ?? null;
     if (dto.bio !== undefined) data.bio = dto.bio ?? null;
 
-    if (Object.keys(data).length > 0) {
-      await this.prisma.clientProfile.update({ where: { userId }, data });
+    const nextFirst = firstName ?? existing.firstName;
+    const nextLast = lastName ?? existing.lastName;
+    const nextFullName = `${nextFirst} ${nextLast}`.trim().replace(/\s+/g, ' ');
+    const namesChanged = firstName !== undefined || lastName !== undefined;
+
+    if (Object.keys(data).length > 0 || namesChanged) {
+      await this.prisma.$transaction(async (tx) => {
+        if (Object.keys(data).length > 0) {
+          await tx.clientProfile.update({ where: { userId }, data });
+        }
+        // Keep the account display name in sync with the profile name so
+        // headers, emails, and admin views never show a stale name.
+        if (namesChanged) {
+          await tx.user.update({ where: { id: userId }, data: { name: nextFullName } });
+        }
+      });
     }
     return this.getProfile(userId);
   }
@@ -215,13 +282,29 @@ export class ClientService {
     return age;
   }
 
-  private toDateOfBirth(dto: { dateOfBirth?: string }): Date | undefined {
+  private toDateOfBirth(dto: { dateOfBirth?: string | null }): Date | undefined {
     if (dto.dateOfBirth === undefined || dto.dateOfBirth === null) return undefined;
-    const date = new Date(dto.dateOfBirth);
-    if (Number.isNaN(date.getTime())) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dto.dateOfBirth);
+    if (!match) {
       throw new ApiException(HttpStatus.BAD_REQUEST, {
         code: 'VALIDATION_FAILED',
-        message: 'dateOfBirth must be a valid date',
+        message: 'dateOfBirth must be a valid ISO-8601 date (YYYY-MM-DD)',
+      });
+    }
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    // Reject impossible calendar dates ("2026-02-30" would otherwise roll
+    // over into March when parsed with `new Date`).
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (
+      date.getUTCFullYear() !== year ||
+      date.getUTCMonth() !== month - 1 ||
+      date.getUTCDate() !== day
+    ) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, {
+        code: 'VALIDATION_FAILED',
+        message: 'dateOfBirth must be a real calendar date',
       });
     }
     if (date.getTime() > Date.now()) {
@@ -230,16 +313,46 @@ export class ClientService {
         message: FUTURE_DOB_MESSAGE,
       });
     }
+    const oldestAllowed = new Date();
+    oldestAllowed.setFullYear(oldestAllowed.getFullYear() - MAX_AGE_YEARS);
+    if (date.getTime() < oldestAllowed.getTime()) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, {
+        code: 'VALIDATION_FAILED',
+        message: `dateOfBirth must be within the last ${MAX_AGE_YEARS} years`,
+      });
+    }
     return date;
   }
 
-  async listLearners(userId: string) {
+  async listLearners(userId: string, options: ListLearnersOptions = {}) {
     const profile = await this.getOrCreateProfile(userId);
     const learners = await this.prisma.learner.findMany({
       where: { clientProfileId: profile.id, deletedAt: null },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     });
-    return { items: learners.map((learner) => this.serializeLearner(learner)) };
+
+    const needle = options.search?.trim().toLowerCase();
+    const filtered = needle
+      ? learners.filter((learner) =>
+          [learner.firstName, learner.lastName, learner.school, learner.grade]
+            .filter((field): field is string => typeof field === 'string' && field.length > 0)
+            .some((field) => field.toLowerCase().includes(needle)) ||
+          learner.subjects.some((subject) => subject.toLowerCase().includes(needle)),
+        )
+      : learners;
+
+    const total = filtered.length;
+    const limit = Math.min(
+      Math.max(Math.floor(options.limit ?? DEFAULT_LEARNERS_LIMIT), 1),
+      MAX_LEARNERS_LIMIT,
+    );
+    const offset = Math.max(Math.floor(options.offset ?? 0), 0);
+    const page = filtered.slice(offset, offset + limit);
+
+    return {
+      items: page.map((learner) => this.serializeLearner(learner)),
+      total,
+    };
   }
 
   async getLearner(userId: string, learnerId: string) {
@@ -255,18 +368,29 @@ export class ClientService {
 
   async createLearner(userId: string, dto: CreateLearnerDto) {
     const profile = await this.getOrCreateProfile(userId);
+
+    const activeCount = await this.prisma.learner.count({
+      where: { clientProfileId: profile.id, deletedAt: null },
+    });
+    if (activeCount >= MAX_LEARNERS_PER_CLIENT) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, {
+        code: 'VALIDATION_FAILED',
+        message: `You can manage at most ${MAX_LEARNERS_PER_CLIENT} learners per account`,
+      });
+    }
+
     const dateOfBirth = this.toDateOfBirth(dto);
     const learner = await this.prisma.learner.create({
       data: {
         clientProfileId: profile.id,
-        firstName: dto.firstName,
-        lastName: dto.lastName,
+        firstName: dto.firstName.trim().replace(/\s+/g, ' '),
+        lastName: dto.lastName.trim().replace(/\s+/g, ' '),
         dateOfBirth: dateOfBirth ?? null,
         gender: dto.gender ?? null,
         grade: dto.grade ?? null,
         school: dto.school ?? null,
         curriculum: dto.curriculum ?? null,
-        subjects: dto.subjects ?? [],
+        subjects: this.normalizeSubjects(dto.subjects) ?? [],
         goals: dto.goals ?? null,
         preferredLanguage: dto.preferredLanguage ?? null,
         notes: dto.notes ?? null,
@@ -285,8 +409,26 @@ export class ClientService {
     }
 
     const data: Prisma.LearnerUpdateInput = {};
-    if (dto.firstName !== undefined) data.firstName = dto.firstName;
-    if (dto.lastName !== undefined) data.lastName = dto.lastName;
+    if (dto.firstName !== undefined) {
+      const cleaned = dto.firstName.trim().replace(/\s+/g, ' ');
+      if (!cleaned) {
+        throw new ApiException(HttpStatus.BAD_REQUEST, {
+          code: 'VALIDATION_FAILED',
+          message: 'firstName cannot be blank',
+        });
+      }
+      data.firstName = cleaned;
+    }
+    if (dto.lastName !== undefined) {
+      const cleaned = dto.lastName.trim().replace(/\s+/g, ' ');
+      if (!cleaned) {
+        throw new ApiException(HttpStatus.BAD_REQUEST, {
+          code: 'VALIDATION_FAILED',
+          message: 'lastName cannot be blank',
+        });
+      }
+      data.lastName = cleaned;
+    }
     if (dto.dateOfBirth !== undefined) {
       const date = this.toDateOfBirth(dto);
       data.dateOfBirth = date ?? null;
@@ -295,7 +437,7 @@ export class ClientService {
     if (dto.grade !== undefined) data.grade = dto.grade ?? null;
     if (dto.school !== undefined) data.school = dto.school ?? null;
     if (dto.curriculum !== undefined) data.curriculum = dto.curriculum ?? null;
-    if (dto.subjects !== undefined) data.subjects = dto.subjects;
+    if (dto.subjects !== undefined) data.subjects = this.normalizeSubjects(dto.subjects) ?? [];
     if (dto.goals !== undefined) data.goals = dto.goals ?? null;
     if (dto.preferredLanguage !== undefined) data.preferredLanguage = dto.preferredLanguage ?? null;
     if (dto.notes !== undefined) data.notes = dto.notes ?? null;
@@ -320,5 +462,67 @@ export class ClientService {
       data: { deletedAt: new Date() },
     });
     return { success: true as const };
+  }
+
+  /**
+   * Single-call dashboard payload so the client home screen does not need
+   * to waterfall profile + learners requests.
+   */
+  async getDashboard(userId: string) {
+    const profile = await this.getOrCreateProfile(userId);
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        emailVerifiedAt: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+    const learners = await this.prisma.learner.findMany({
+      where: { clientProfileId: profile.id, deletedAt: null },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    });
+
+    const subjectKeys = new Set<string>();
+    for (const learner of learners) {
+      for (const subject of learner.subjects) {
+        subjectKeys.add(subject.trim().toLowerCase());
+      }
+    }
+
+    const completenessChecks: Array<string | null | undefined> = [
+      profile.photoUrl,
+      profile.phone ?? user.phone,
+      profile.preferredLanguage,
+      profile.location,
+      profile.bio,
+    ];
+    const filledFields = completenessChecks.filter(
+      (field) => typeof field === 'string' && field.trim().length > 0,
+    ).length;
+    const learnerBonus = learners.length > 0 ? 1 : 0;
+    const profileCompleteness = Math.round(
+      ((filledFields + learnerBonus) / (completenessChecks.length + 1)) * 100,
+    );
+
+    const serialized = this.serializeProfile(profile, user);
+    const recentLearners = learners
+      .slice(0, 3)
+      .map((learner) => this.serializeLearner(learner));
+
+    return {
+      profile: serialized,
+      stats: {
+        totalLearners: learners.length,
+        subjectsCovered: subjectKeys.size,
+        profileCompleteness,
+        emailVerified: user.emailVerifiedAt !== null,
+      },
+      recentLearners,
+    };
   }
 }
