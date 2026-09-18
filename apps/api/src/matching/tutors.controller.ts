@@ -13,21 +13,16 @@ export class TutorsController {
   async getTutorProfile(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     void user;
     const profile = await this.prisma.tutorProfile.findUnique({
-      where: { userId: id, status: 'ACTIVE', user: { status: 'ACTIVE' } },
+      where: { userId: id },
       include: { subjects: true, availability: true, user: { select: { name: true, status: true } } },
     });
 
-    if (!profile) {
+    if (!profile || profile.status !== 'ACTIVE' || profile.user.status !== 'ACTIVE') {
       throw new ApiException(HttpStatus.NOT_FOUND, {
         code: 'NOT_FOUND',
         message: 'Tutor profile not found',
       });
     }
-
-    const experienceYears = (() => {
-      const months = (Date.now() - profile.createdAt.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
-      return Math.max(0, Math.floor(months / 12));
-    })();
 
     return {
       id: profile.userId,
@@ -40,18 +35,24 @@ export class TutorsController {
       levels: Array.from(
         new Set(profile.subjects.flatMap((subject) => subject.academicLevels)),
       ),
-      experience: experienceYears,
-      languages: [],
+      experience: this.experienceYears(profile.createdAt),
+      languages: [] as string[],
       teachingModes: profile.teachingModes,
       serviceAreas: profile.serviceAreas,
       location: profile.location,
       hourlyRate: profile.hourlyRate,
+      currency: null as string | null,
       availability: profile.availability.map((slot) => ({
         dayOfWeek: slot.dayOfWeek,
         startTime: slot.startTime,
         endTime: slot.endTime,
       })),
-      rating: null,
+      rating: null as number | null,
     };
+  }
+
+  private experienceYears(createdAt: Date): number {
+    const months = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+    return Math.max(0, Math.floor(months / 12));
   }
 }

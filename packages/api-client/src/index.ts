@@ -276,6 +276,108 @@ export class ApiClient {
     return this.raw(`/client/learners/${learnerId}`, { method: 'DELETE', auth: true });
   }
 
+  getTutorRequest(requestId: string): Promise<{
+    id: string;
+    status: string;
+    subjects: string[];
+    academicLevels: string[];
+    teachingModes: string[];
+    location: string | null;
+    serviceArea: string | null;
+    notes: string | null;
+    schedule: Array<{ id: string; dayOfWeek: string; startTime: string; endTime: string }>;
+    ready: boolean;
+    createdAt: string;
+    updatedAt: string;
+  }> {
+    return this.raw(`/tutor-requests/${requestId}`, { auth: true });
+  }
+
+  listTutorRequestMatches(requestId: string): Promise<{
+    matches: Array<{
+      id: string;
+      tutor: {
+        id: string;
+        name: string;
+        photo: string | null;
+        subjects: string[];
+        levels: string[];
+        experience: number | null;
+        rating: number | null;
+        teachingModes: string[];
+        serviceAreas: string[];
+        location: string | null;
+        hourlyRate: number | null;
+        currency: string | null;
+      };
+      score: number;
+      factorScores: Record<string, number>;
+      matchReasons: string[];
+      status: string;
+    }>;
+    count: number;
+    message?: string;
+    request?: {
+      id: string;
+      status: string;
+      ready: boolean;
+      subjects: string[];
+      academicLevels: string[];
+      teachingModes: string[];
+    };
+  }> {
+    return this.raw(`/tutor-requests/${requestId}/matches`, { auth: true });
+  }
+
+  generateTutorRequestMatches(requestId: string, limit?: number): Promise<{
+    matches: Array<{
+      id: string;
+      tutor: {
+        id: string;
+        name: string;
+        photo: string | null;
+        subjects: string[];
+        levels: string[];
+        experience: number | null;
+        rating: number | null;
+        teachingModes: string[];
+        serviceAreas: string[];
+        location: string | null;
+        hourlyRate: number | null;
+        currency: string | null;
+      };
+      score: number;
+      factorScores: Record<string, number>;
+      matchReasons: string[];
+      status: string;
+    }>;
+    count: number;
+    message?: string;
+  }> {
+    const query = typeof limit === 'number' ? `?limit=${limit}` : '';
+    return this.raw(`/tutor-requests/${requestId}/matches${query}`, { method: 'POST', auth: true });
+  }
+
+  getTutorProfile(tutorId: string): Promise<{
+    id: string;
+    name: string;
+    photo: string | null;
+    bio: string | null;
+    subjects: string[];
+    levels: string[];
+    experience: number;
+    languages: string[];
+    teachingModes: string[];
+    serviceAreas: string[];
+    location: string | null;
+    hourlyRate: number | null;
+    currency: string | null;
+    availability: Array<{ dayOfWeek: string; startTime: string; endTime: string }>;
+    rating: number | null;
+  }> {
+    return this.raw(`/tutors/${tutorId}`, { auth: true });
+  }
+
   private async requestForm<T>(path: string, form: FormData): Promise<{ data: T; meta: ResponseMeta }> {
     const token = await this.options.getAccessToken?.();
     const headers: Record<string, string> = { Accept: 'application/json' };

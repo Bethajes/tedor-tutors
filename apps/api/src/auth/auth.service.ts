@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { UserRoleName } from '@prisma/client';
 import type { PublicUser } from '@tedor/types';
@@ -29,6 +29,8 @@ interface RequestContext {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger('AuthService');
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tokens: TokenService,
@@ -65,6 +67,9 @@ export class AuthService {
       });
 
     await this.sendVerificationEmail(user.email);
+    this.email.sendWelcomeEmail(user.email, user.name).catch((error) => {
+      this.logger?.error?.(`Failed to send welcome email to ${user.email}: ${error instanceof Error ? error.message : String(error)}`);
+    });
 
     const session = await this.tokens.createSession(user.id, ctx);
     const accessToken = this.tokens.issueAccessToken({
@@ -97,6 +102,14 @@ export class AuthService {
     }
 
     await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+
+    this.email.sendLoginNotification(user.email, user.name, {
+      ip: ctx.ip,
+      userAgent: ctx.userAgent,
+      time: new Date(),
+    }).catch((error) => {
+      this.logger.error(`Failed to send login notification to ${user.email}: ${error instanceof Error ? error.message : String(error)}`);
+    });
 
     const session = await this.tokens.createSession(user.id, ctx);
     const accessToken = this.tokens.issueAccessToken({ id: user.id, email: user.email, roleName: user.role.name });

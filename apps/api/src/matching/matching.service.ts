@@ -6,7 +6,7 @@ import { EligibilityService, type EligibilityRequest, type TutorCandidate } from
 import { ScoringService } from './scoring/scoring.service';
 import type { CompatibilityResult, FactorScores, ScoreCandidate, ScoreRequest } from './scoring/scoring.types';
 import { MATCHING_CONFIG } from './matching.config';
-import { compareRankable, selectRecommended, type RankableCandidate } from './ranking';
+import { selectRecommended } from './ranking';
 
 type TutorProfileWithRelations = Prisma.TutorProfileGetPayload<{
   include: {
@@ -35,6 +35,7 @@ type MatchWithTutor = Prisma.MatchGetPayload<{
             teachingModes: true;
             hourlyRate: true;
             status: true;
+            createdAt: true;
             subjects: true;
           };
         };
@@ -67,7 +68,7 @@ interface SerializedMatch {
   id: string;
   tutor: TutorPreview;
   score: number;
-  factorScores: Record<string, number>;
+  factorScores: FactorScores;
   matchReasons: string[];
   status: MatchStatus;
 }
@@ -76,6 +77,14 @@ export interface MatchResults {
   matches: SerializedMatch[];
   count: number;
   message?: string;
+  request?: {
+    id: string;
+    status: string;
+    ready: boolean;
+    subjects: string[];
+    academicLevels: string[];
+    teachingModes: string[];
+  };
 }
 
 const STAFF_ROLES: UserRoleName[] = [
@@ -149,9 +158,10 @@ export class MatchingService {
     }));
 
     const safeLimit = this.resultLimit(limit);
-    const recommended = await this.persistMatches(tutorRequestId, ranked, safeLimit);
+    const recommended = selectRecommended(ranked, safeLimit);
+    await this.persistMatches(tutorRequestId, recommended);
 
-    const matches = await this.fetchMatches(tutorRequestId, safeLimit);
+    const matches = await this.fetchMatches(tutorRequestId);
 
     const result: MatchResults = {
       matches: matches.map((match) => this.serializeMatch(match)),
@@ -177,13 +187,45 @@ export class MatchingService {
     userRole: UserRoleName,
     tutorRequestId: string,
   ): Promise<MatchResults> {
-    await this.loadAuthorizedRequest(userId, userRole, tutorRequestId);
+    const tutorRequest = await this.loadAuthorizedRequest(userId, userRole, tutorRequestId);
+    const ready = this.isRequestReady(tutorRequest);
 
-    const matches = await this.fetchMatches(tutorRequestId);
+    const requestInfo = {
+      id: tutorRequest.id,
+      status: tutorRequest.status,
+      ready,
+      subjects: tutorRequest.subjects,
+      academicLevels: tutorRequest.academicLevels,
+      teachingModes: tutorRequest.teachingModes,
+    };
+
+    if (!ready) {
+      return {
+        matches: [],
+        count: 0,
+        request: requestInfo,
+        message: 'Complete your tutor request before viewing matches.',
+      };
+    }
+
+    let matches = await this.fetchMatches(tutorRequestId);
+
+    if (matches.length === 0) {
+      try {
+        await this.generateMatches(userId, userRole, tutorRequestId);
+        matches = await this.fetchMatches(tutorRequestId);
+      } catch {
+        // If on-demand generation fails (e.g. transient eligibility issue),
+        // return an empty list rather than breaking the view. The client can
+        // explicitly POST /matches to surface the error.
+        matches = [];
+      }
+    }
 
     return {
       matches: matches.map((match) => this.serializeMatch(match)),
       count: matches.length,
+      request: requestInfo,
     };
   }
 
@@ -215,6 +257,33 @@ export class MatchingService {
     }
 
     return tutorRequest;
+  }
+
+  private isRequestReady(request: TutorRequestWithSchedule): boolean {
+    return (
+      request.status !== RequestStatus.CANCELLED &&
+      request.status !== RequestStatus.COMPLETED &&
+      request.subjects.length > 0 &&
+      request.subjects.every((subject) => subject.trim().length > 0) &&
+      request.academicLevels.length > 0 &&
+      request.academicLevels.every((level) => level.trim().length > 0) &&
+      request.teachingModes.length > 0
+    );
+  }
+
+  private assertRequestReady(request: TutorRequestWithSchedule): void {
+    if (!this.isRequestReady(request)) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, {
+        code: 'VALIDATION_FAILED',
+        message: 'Tutor request is not ready for matching',
+      });
+    }
+  }
+
+  private resultLimit(limit: number): number {
+    return Number.isInteger(limit) && limit > 0 && limit <= MATCHING_CONFIG.MAX_RESULT_LIMIT
+      ? limit
+      : MATCHING_CONFIG.DEFAULT_MATCH_LIMIT;
   }
 
   private async findScoredEligible(
@@ -255,10 +324,13 @@ export class MatchingService {
       }));
   }
 
-  private async persistMatches(requestId: string, recommended: ReturnType<typeof selectRecommended>) {
+  private async persistMatches(
+    requestId: string,
+    recommended: ReturnType<typeof selectRecommended>,
+  ): Promise<ReturnType<typeof selectRecommended>> {
     if (recommended.length === 0) {
       await this.expireStaleMatches(requestId, new Set());
-      return;
+      return recommended;
     }
 
     const existing = await this.prisma.match.findMany({
@@ -297,7 +369,6 @@ export class MatchingService {
           }),
         );
       } else if (current === MatchStatus.VIEWED) {
-        // The client has already seen this match; refresh score data but keep the status.
         operations.push(
           this.prisma.match.update({
             where: { tutorRequestId_tutorId: { tutorRequestId: requestId, tutorId: candidate.tutorId } },
@@ -305,14 +376,12 @@ export class MatchingService {
           }),
         );
       }
-      // SELECTED and DECLINED are left untouched — they represent client intent.
     }
 
     for (const candidate of recommended) {
       allTutorIds.delete(candidate.tutorId);
     }
 
-    // Any remaining RECOMMENDED/VIEWED matches that are no longer recommended get expired.
     for (const tutorId of allTutorIds) {
       const status = existingByTutor.get(tutorId);
       if (status === MatchStatus.RECOMMENDED || status === MatchStatus.VIEWED) {
@@ -328,6 +397,8 @@ export class MatchingService {
     if (operations.length > 0) {
       await this.prisma.$transaction(operations);
     }
+
+    return recommended;
   }
 
   private async expireStaleMatches(requestId: string, activeTutorIds: Set<string>) {
@@ -365,6 +436,7 @@ export class MatchingService {
           select: {
             id: true,
             name: true,
+            status: true,
             tutorProfile: {
               select: {
                 photoUrl: true,
@@ -372,6 +444,7 @@ export class MatchingService {
                 serviceAreas: true,
                 teachingModes: true,
                 hourlyRate: true,
+                status: true,
                 createdAt: true,
                 subjects: true,
               },
@@ -400,9 +473,10 @@ export class MatchingService {
         serviceAreas: profile?.serviceAreas ?? [],
         location: profile?.location ?? null,
         hourlyRate: profile?.hourlyRate ?? null,
+        currency: null,
       },
       score: match.score,
-      factorScores: match.factorScores as Record<string, number>,
+      factorScores: match.factorScores as unknown as FactorScores,
       matchReasons: match.matchReasons as string[],
       status: match.status,
     };

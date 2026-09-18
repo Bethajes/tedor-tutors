@@ -65,6 +65,14 @@ enum MatchStatus {
   EXPIRED
 }
 
+enum OpportunityStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  CANCELLED
+}
+
 model Role {
   id          String           @id @default(cuid())
   name        UserRoleName     @unique
@@ -121,6 +129,7 @@ model User {
   tutorProfile             TutorProfile?
   tutorRequests            TutorRequest[]
   tutorMatches             Match[]
+  tutorOpportunities       TutorOpportunity[]       @relation("TutorOpportunities")
 
   @@index([email])
   @@index([roleId])
@@ -278,6 +287,7 @@ model TutorRequest {
 
   schedule TutorRequestSchedule[]
   matches  Match[]
+  opportunities TutorOpportunity[]
 
   @@index([userId])
   @@index([status])
@@ -308,9 +318,29 @@ model Match {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
+  opportunity TutorOpportunity?
+
   @@unique([tutorRequestId, tutorId])
   @@index([tutorRequestId])
   @@index([tutorId])
   @@index([status])
   @@index([score(sort: Desc)])
+}
+
+model TutorOpportunity {
+  id             String            @id @default(cuid())
+  matchId        String            @unique
+  match          Match             @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  tutorId        String
+  tutor          User              @relation("TutorOpportunities", fields: [tutorId], references: [id], onDelete: Cascade)
+  tutorRequestId String
+  tutorRequest   TutorRequest      @relation(fields: [tutorRequestId], references: [id], onDelete: Cascade)
+  status         OpportunityStatus @default(PENDING)
+  respondedAt    DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([tutorId])
+  @@index([tutorRequestId])
+  @@index([status])
 }
