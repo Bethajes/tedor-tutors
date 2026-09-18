@@ -12,6 +12,7 @@ export function LoginForm({ next }: { next?: string }) {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -50,21 +51,51 @@ export function LoginForm({ next }: { next?: string }) {
               id="email"
               type="email"
               autoComplete="email"
+              autoFocus
+              placeholder="you@example.com"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
+              disabled={submitting}
+              aria-invalid={error ? true : undefined}
               required
             />
           </div>
           <div>
             <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
+                placeholder="Enter your password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                disabled={submitting}
+                aria-invalid={error ? true : undefined}
+                required
+                style={{ paddingRight: '4.25rem' }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((visible) => !visible)}
+                disabled={submitting}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                style={{
+                  position: 'absolute',
+                  right: '0.5rem',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  border: 0,
+                  background: 'transparent',
+                  color: '#1d4ed8',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  padding: '0.25rem 0.5rem',
+                }}
+              >
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
           </div>
         </div>
         <button className="btn" type="submit" disabled={submitting}>

@@ -69,17 +69,20 @@ async function upsertUser(
   options: { phone?: string; emailVerified?: boolean } = {},
 ) {
   const passwordHash = await argon2.hash(password);
+  const roleId = (await prisma.role.findUniqueOrThrow({ where: { name: role } })).id;
+  const status = options.emailVerified ? 'ACTIVE' : 'PENDING_VERIFICATION';
   const user = await prisma.user.upsert({
     where: { email },
-    update: {},
+    // Refresh on re-run so the credentials below always work in dev.
+    update: { name, passwordHash, roleId, status },
     create: {
       name,
       email,
       phone: options.phone ?? null,
       passwordHash,
       emailVerifiedAt: options.emailVerified ? new Date() : null,
-      status: options.emailVerified ? 'ACTIVE' : 'PENDING_VERIFICATION',
-      roleId: (await prisma.role.findUniqueOrThrow({ where: { name: role } })).id,
+      status,
+      roleId,
     },
   });
   return { email: user.email, role, status: user.status };
@@ -91,6 +94,9 @@ async function main() {
 
   const superAdminEmail = process.env.SEED_SUPER_ADMIN_EMAIL ?? 'admin@tedor.local';
   const superAdminPassword = process.env.SEED_SUPER_ADMIN_PASSWORD ?? 'AdminDev123!';
+  const demoAdminEmail = process.env.SEED_DEMO_ADMIN_EMAIL ?? 'staff-admin@tedor.local';
+  const demoCoordinatorEmail =
+    process.env.SEED_DEMO_COORDINATOR_EMAIL ?? 'coordinator@tedor.local';
   const demoClientEmail = process.env.SEED_DEMO_CLIENT_EMAIL ?? 'client@tedor.local';
   const demoTutorEmail = process.env.SEED_DEMO_TUTOR_EMAIL ?? 'tutor@tedor.local';
   const demoPassword = process.env.SEED_DEMO_PASSWORD ?? 'DemoPass123!';
@@ -99,6 +105,17 @@ async function main() {
     upsertUser(superAdminEmail, superAdminPassword, 'Tedor Super Admin', UserRoleName.SUPER_ADMIN, {
       emailVerified: true,
     }),
+    upsertUser(demoAdminEmail, demoPassword, 'Demo Admin', UserRoleName.ADMIN, {
+      phone: '+12025550103',
+      emailVerified: true,
+    }),
+    upsertUser(
+      demoCoordinatorEmail,
+      demoPassword,
+      'Demo Coordinator',
+      UserRoleName.COORDINATOR,
+      { phone: '+12025550104', emailVerified: true },
+    ),
     upsertUser(demoClientEmail, demoPassword, 'Demo Client', UserRoleName.CLIENT, {
       phone: '+12025550101',
       emailVerified: true,
@@ -109,7 +126,7 @@ async function main() {
     }),
   ]);
 
-  console.log('Seed complete. Accounts:');
+  console.log('Seed complete. Accounts (passwords from SEED_* env in apps/api/.env):');
   accounts.forEach((account) =>
     console.log(`  ${account.email} · role=${account.role} · status=${account.status}`),
   );
