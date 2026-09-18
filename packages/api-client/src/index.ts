@@ -3,10 +3,12 @@ import type {
   ApiResponse,
   AuthTokens,
   ChangePasswordRequest,
+  ClientDashboard,
   ClientProfile,
   CreateLearnerRequest,
   Learner,
   LearnerList,
+  ListLearnersParams,
   PublicUser,
   RegisterRequest,
   SessionInfo,
@@ -256,8 +258,17 @@ export class ApiClient {
     return this.requestForm<{ photoUrl: string }>('/client/profile/photo', form).then(({ data }) => data);
   }
 
-  listLearners(): Promise<LearnerList> {
-    return this.raw('/client/learners', { auth: true });
+  getClientDashboard(): Promise<ClientDashboard> {
+    return this.raw('/client/dashboard', { auth: true });
+  }
+
+  listLearners(params: ListLearnersParams = {}): Promise<LearnerList> {
+    const search = new URLSearchParams();
+    if (params.search?.trim()) search.set('search', params.search.trim());
+    if (params.limit !== undefined) search.set('limit', String(params.limit));
+    if (params.offset !== undefined) search.set('offset', String(params.offset));
+    const suffix = search.size > 0 ? `?${search.toString()}` : '';
+    return this.raw(`/client/learners${suffix}`, { auth: true });
   }
 
   createLearner(input: CreateLearnerRequest): Promise<Learner> {

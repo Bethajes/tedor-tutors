@@ -14,14 +14,16 @@ export function Card({
   children: ReactNode;
 }) {
   return (
-    <section className="card">
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5 sm:p-6">
       {title || actions ? (
-        <div className="card-header">
-          <div>
-            {title ? <h2>{title}</h2> : null}
-            {subtitle ? <p className="muted card-subtitle">{subtitle}</p> : null}
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            {title ? (
+              <h2 className="text-base font-semibold tracking-tight text-slate-900">{title}</h2>
+            ) : null}
+            {subtitle ? <p className="mt-0.5 text-sm text-slate-500">{subtitle}</p> : null}
           </div>
-          {actions ? <div className="row-actions">{actions}</div> : null}
+          {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
         </div>
       ) : null}
       {children}

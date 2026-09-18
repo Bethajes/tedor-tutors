@@ -167,4 +167,24 @@ export type UpdateLearnerRequest = Partial<CreateLearnerRequest>;
 
 export interface LearnerList {
   items: Learner[];
+  total: number;
+}
+
+export interface ClientDashboardStats {
+  totalLearners: number;
+  subjectsCovered: number;
+  profileCompleteness: number;
+  emailVerified: boolean;
+}
+
+export interface ClientDashboard {
+  profile: ClientProfile;
+  stats: ClientDashboardStats;
+  recentLearners: Learner[];
+}
+
+export interface ListLearnersParams {
+  search?: string;
+  limit?: number;
+  offset?: number;
 }

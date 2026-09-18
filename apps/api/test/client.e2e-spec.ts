@@ -289,5 +289,85 @@ describe('Client API (e2e)', () => {
         .set('Authorization', auth(tutor.tokens))
         .expect(403);
     });
+
+    it('supports search and pagination', async () => {
+      const client = await registerAndLogin();
+      for (const [firstName, lastName] of [['Grace', 'Hopper'], ['Alan', 'Turing']] as const) {
+        await request(app.getHttpServer())
+          .post(`${base}/client/learners`)
+          .set('Authorization', auth(client.tokens))
+          .send({ firstName, lastName })
+          .expect(201);
+      }
+
+      const searched = await request(app.getHttpServer())
+        .get(`${base}/client/learners?search=grace`)
+        .set('Authorization', auth(client.tokens))
+        .expect(200);
+      expect((searched.body as { data: { items: unknown[]; total: number } }).data.total).toBe(1);
+
+      const paged = await request(app.getHttpServer())
+        .get(`${base}/client/learners?limit=1&offset=1`)
+        .set('Authorization', auth(client.tokens))
+        .expect(200);
+      const page = (paged.body as { data: { items: unknown[]; total: number } }).data;
+      expect(page.total).toBe(2);
+      expect(page.items).toHaveLength(1);
+
+      await request(app.getHttpServer())
+        .get(`${base}/client/learners?limit=0`)
+        .set('Authorization', auth(client.tokens))
+        .expect(400);
+    });
+
+    it('rejects impossible calendar dates', async () => {
+      const client = await registerAndLogin();
+      await request(app.getHttpServer())
+        .post(`${base}/client/learners`)
+        .set('Authorization', auth(client.tokens))
+        .send({ firstName: 'Impossible', lastName: 'Date', dateOfBirth: '2015-02-30' })
+        .expect(400);
+    });
+  });
+
+  describe('Dashboard', () => {
+    it('returns profile, stats, and recent learners', async () => {
+      const client = await registerAndLogin();
+      await request(app.getHttpServer())
+        .post(`${base}/client/learners`)
+        .set('Authorization', auth(client.tokens))
+        .send({ firstName: 'Grace', lastName: 'Hopper', subjects: ['Math', ' math ', ''] })
+        .expect(201);
+
+      const response = await request(app.getHttpServer())
+        .get(`${base}/client/dashboard`)
+        .set('Authorization', auth(client.tokens))
+        .expect(200);
+      const data = (response.body as { data: unknown }).data as {
+        profile: { firstName: string };
+        stats: { totalLearners: number; subjectsCovered: number; profileCompleteness: number; emailVerified: boolean };
+        recentLearners: Array<{ subjects: string[] }>;
+      };
+      expect(data.profile.firstName).toBe('Client');
+      expect(data.stats.totalLearners).toBe(1);
+      // Duplicate/blank subjects are normalized before storage.
+      expect(data.stats.subjectsCovered).toBe(1);
+      expect(data.recentLearners[0].subjects).toEqual(['Math']);
+    });
+
+    it('syncs the account name when the profile name changes', async () => {
+      const client = await registerAndLogin();
+      await request(app.getHttpServer())
+        .patch(`${base}/client/profile`)
+        .set('Authorization', auth(client.tokens))
+        .send({ firstName: '  Ada  ', lastName: 'Lovelace' })
+        .expect(200);
+
+      const me = await request(app.getHttpServer())
+        .get(`${base}/auth/me`)
+        .set('Authorization', auth(client.tokens))
+        .expect(200);
+      expect((me.body as { data: { name: string } }).data.name).toBe('Ada Lovelace');
+    });
   });
 });
