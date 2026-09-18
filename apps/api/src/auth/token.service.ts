@@ -21,10 +21,11 @@ export class TokenService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
-    config: ConfigService,
+    private readonly configService: ConfigService,
   ) {
-    this.accessTtl = config.get<string>('app.jwtAccessTtl') ?? '15m';
-    this.refreshTtlMs = (config.get<number>('app.jwtRefreshTtlDays') ?? 30) * 24 * 60 * 60 * 1000;
+    this.accessTtl = this.configService.get<string>('app.jwtAccessTtl') ?? '15m';
+    this.refreshTtlMs =
+      (this.configService.get<number>('app.jwtRefreshTtlDays') ?? 30) * 24 * 60 * 60 * 1000;
   }
 
   issueAccessToken(user: { id: string; email: string; roleName: string }): string {
