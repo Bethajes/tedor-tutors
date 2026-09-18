@@ -9,6 +9,12 @@ export interface AppConfig {
   mobileOrigin: string;
   telegramBotToken: string;
   emailProvider: string;
+  smtpHost: string;
+  smtpPort: number;
+  smtpUser: string;
+  smtpPassword: string;
+  smtpFrom: string;
+  smtpSecure: boolean;
 }
 
 function parsePort(raw: string | undefined): number {
@@ -32,5 +38,11 @@ export default (): { app: AppConfig } => ({
     mobileOrigin: process.env.MOBILE_ORIGIN ?? '*',
     telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
     emailProvider: process.env.EMAIL_PROVIDER ?? 'mock',
+    smtpHost: process.env.SMTP_HOST ?? '',
+    smtpPort: parseInt(process.env.SMTP_PORT ?? '587', 10),
+    smtpUser: process.env.SMTP_USER ?? '',
+    smtpPassword: process.env.SMTP_PASSWORD ?? '',
+    smtpFrom: process.env.SMTP_FROM ?? 'noreply@tedor.local',
+    smtpSecure: process.env.SMTP_SECURE === 'true',
   },
 });
